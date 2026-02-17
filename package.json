@@ -1,0 +1,44 @@
+{
+  "name": "agentvault",
+  "version": "0.1.0",
+  "description": "Verifiable storage infrastructure for autonomous AI agents on Filecoin",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch --env-file .env src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "@hono/node-server": "^1.11.0",
+    "@hono/zod-validator": "^0.2.0",
+    "zod": "^3.23.0",
+    "pino": "^9.2.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "filecoin",
+    "x402",
+    "ai-agents",
+    "verifiable-storage",
+    "autonomous-agents"
+  ],
+  "author": "AgentVault Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpanvictor/agentvault.git"
+  }
+}
