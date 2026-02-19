@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PDPStatus } from './storage.js';
 
 /**
  * Agent registration request
@@ -45,7 +46,7 @@ export interface Agent {
     };
     x402Support: boolean;
   };
-  cardCid: string;
+  cardPieceCid: string;
   registeredAt: number;
   storageManifest: StorageManifestEntry[];
   reputation: {
@@ -60,10 +61,12 @@ export interface Agent {
  */
 export interface StorageManifestEntry {
   vaultId: string;
-  cid: string;
+  pieceCid: string;
   type: string;
   storedAt: number;
   size: number;
+  pdpStatus: PDPStatus;
+  pdpVerifiedAt?: number;
 }
 
 /**
@@ -75,10 +78,11 @@ export interface AuditEntry {
   agentId: string;
   action: 'store' | 'retrieve' | 'verify' | 'register';
   details: {
-    cid?: string;
+    pieceCid?: string;
     vaultId?: string;
     size?: number;
     paymentId?: string;
+    pdpStatus?: PDPStatus;
     success: boolean;
     error?: string;
   };

@@ -1,18 +1,5 @@
 import type { Config } from '../types/config.js';
-
-/**
- * x402 Payment Payload (matches FIL-x402 format)
- */
-export interface PaymentPayload {
-  from: string;
-  to: string;
-  value: string;
-  validAfter: string;
-  validBefore: string;
-  nonce: string;
-  signature: string;
-  token: string;
-}
+import type { Payment } from '../types/storage.js';
 
 /**
  * Payment requirements from provider
@@ -66,7 +53,7 @@ export class X402Client {
    * Verify a payment signature and check if it's valid
    */
   async verifyPayment(
-    payment: PaymentPayload,
+    payment: Payment,
     requirements: PaymentRequirements
   ): Promise<VerifyResponse> {
     try {
@@ -93,7 +80,7 @@ export class X402Client {
         };
       }
 
-      return await response.json();
+      return await response.json() as VerifyResponse;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return {
@@ -113,7 +100,7 @@ export class X402Client {
   /**
    * Settle a payment on-chain
    */
-  async settlePayment(payment: PaymentPayload): Promise<SettleResponse> {
+  async settlePayment(payment: Payment): Promise<SettleResponse> {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -139,7 +126,7 @@ export class X402Client {
         };
       }
 
-      return await response.json();
+      return await response.json() as SettleResponse;
     } catch (error) {
       return {
         success: false,
@@ -166,7 +153,7 @@ export class X402Client {
         };
       }
 
-      return await response.json();
+      return await response.json() as SettleResponse;
     } catch (error) {
       return {
         success: false,
@@ -188,7 +175,7 @@ export class X402Client {
         return { healthy: false };
       }
 
-      const data = await response.json();
+      const data = await response.json() as Record<string, unknown>;
       return { healthy: true, details: data };
     } catch {
       return { healthy: false };

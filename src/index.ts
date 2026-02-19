@@ -30,7 +30,7 @@ app.get('/', (c) => {
       health: '/health',
       store: 'POST /agent/store',
       retrieve: 'GET /agent/retrieve/:id',
-      verify: 'GET /agent/verify/:cid',
+      verify: 'GET /agent/verify/:pieceCid',
       register: 'POST /agent/register',
       audit: 'GET /agent/audit/:agentId',
     },
