@@ -3,7 +3,6 @@ import type { Config } from '../../types/config.js';
 import type {
   IStorageProvider,
   VaultEntry,
-  PDPStatus,
   StoreResponse,
   RetrieveResponse,
   PDPVerifyResponse,
@@ -11,9 +10,6 @@ import type {
 import { MockStorageProvider } from './mock.js';
 import { VaultIndex } from './vault-index.js';
 
-/**
- * Store request parameters (internal)
- */
 export interface StoreParams {
   agentId: string;
   data: string;
@@ -26,16 +22,7 @@ export interface StoreParams {
 }
 
 /**
- * StorageService
- *
- * Main orchestration layer for storage operations.
- * Wraps the storage provider and vault index.
- *
- * Routes call this service, which handles:
- * - Provider selection (mock vs synapse)
- * - VaultEntry creation and indexing
- * - Data hashing for integrity
- * - VaultId generation
+ * StorageService - Main orchestration layer
  */
 export class StorageService {
   private provider: IStorageProvider;
@@ -46,10 +33,8 @@ export class StorageService {
     this.config = config;
     this.index = new VaultIndex();
 
-    // Select provider based on config
     if (config.storage.provider === 'synapse') {
-      // TODO: Implement SynapseStorageProvider in Issue #11
-      console.warn('Synapse provider not yet implemented, falling back to mock');
+      console.warn('Synapse provider not yet implemented, using mock');
       this.provider = new MockStorageProvider();
     } else {
       this.provider = new MockStorageProvider();
@@ -58,28 +43,18 @@ export class StorageService {
     console.log(`StorageService initialized with provider: ${config.storage.provider}`);
   }
 
-  /**
-   * Generate a unique vault ID
-   */
   private generateVaultId(): string {
     const uuid = randomUUID().replace(/-/g, '').substring(0, 12);
     return `vault_${uuid}`;
   }
 
-  /**
-   * Compute SHA256 hash of data for integrity checking
-   */
   private computeDataHash(data: string): string {
     return createHash('sha256').update(data).digest('hex');
   }
 
-  /**
-   * Store data and create a vault entry
-   */
   async store(params: StoreParams): Promise<StoreResponse> {
     const { agentId, data, metadata, paymentId } = params;
 
-    // Upload to storage provider
     const uploadResult = await this.provider.upload(data, metadata);
 
     if (!uploadResult.success) {
@@ -95,7 +70,6 @@ export class StorageService {
       };
     }
 
-    // Create vault entry
     const vaultId = this.generateVaultId();
     const storedAt = Date.now();
 
@@ -115,7 +89,6 @@ export class StorageService {
       paymentId,
     };
 
-    // Add to index
     this.index.add(entry);
 
     return {
@@ -130,11 +103,7 @@ export class StorageService {
     };
   }
 
-  /**
-   * Retrieve data by vaultId or pieceCid
-   */
   async retrieve(id: string): Promise<RetrieveResponse> {
-    // Look up in index
     const entry = this.index.get(id);
 
     if (!entry) {
@@ -147,7 +116,6 @@ export class StorageService {
       };
     }
 
-    // Retrieve from provider
     const result = await this.provider.retrieve(entry.pieceCid);
 
     if (!result.success) {
@@ -177,9 +145,6 @@ export class StorageService {
     };
   }
 
-  /**
-   * Verify PDP proof for a pieceCid (lightweight, no data retrieval)
-   */
   async verify(pieceCid: string): Promise<PDPVerifyResponse> {
     const entry = this.index.getByPieceCid(pieceCid);
 
@@ -191,10 +156,8 @@ export class StorageService {
       };
     }
 
-    // Verify with provider
     const result = await this.provider.verifyPDP(pieceCid);
 
-    // Update index with verification result
     if (result.verified) {
       this.index.updatePDPStatus(pieceCid, 'verified', result.verifiedAt);
     }
@@ -210,23 +173,14 @@ export class StorageService {
     };
   }
 
-  /**
-   * Get all vaults for an agent
-   */
   getVaultsForAgent(agentId: string): VaultEntry[] {
     return this.index.getByAgentId(agentId);
   }
 
-  /**
-   * Get vault by ID (vaultId or pieceCid)
-   */
   getVault(id: string): VaultEntry | null {
     return this.index.get(id);
   }
 
-  /**
-   * Get service stats (for health checks)
-   */
   getStats(): { provider: string; vaults: number; agents: number } {
     const indexStats = this.index.getStats();
     return {
@@ -237,6 +191,5 @@ export class StorageService {
   }
 }
 
-// Re-export for convenience
 export { MockStorageProvider } from './mock.js';
 export { VaultIndex } from './vault-index.js';

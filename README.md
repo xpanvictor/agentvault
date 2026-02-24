@@ -1,64 +1,65 @@
-# AgentVault + ClawVault
+# AgentVault
 
-**Verifiable storage and identity for autonomous AI agents on Filecoin.**
+Verifiable storage for autonomous AI agents on Filecoin with x402 micropayments.
 
----
+## Setup
 
-## The Problem
-
-AI agents can move money but can't prove who they are. There's no tamper-proof memory, no verifiable identity, no way for Agent B to trust Agent A's claimed output.
-
-## The Solution
-
-**AgentVault** is a backend protocol that gives agents:
-- Verifiable storage on Filecoin with PDP proofs
-- ERC-8004 on-chain identity
-- x402 micropayments for autonomous storage purchases
-- Tamper-proof audit trails
-
-**ClawVault** is an OpenClaw plugin that brings these capabilities to 180K+ developers with simple tools:
-- `vault.store()` — Store agent memory verifiably
-- `vault.recall()` — Retrieve with cryptographic proof
-- `vault.identity()` — Prove/verify agent identity
-- `vault.audit()` — View tamper-proof history
-
-## Architecture
-
-```
-ClawVault (OpenClaw Plugin)
-        ↓
-AgentVault (:3500) — Backend Protocol
-        ↓
-┌───────────────┬───────────────┬───────────────┐
-│   FIL-x402    │  Filecoin     │   ERC-8004    │
-│   Payments    │  Storage/PDP  │   Identity    │
-└───────────────┴───────────────┴───────────────┘
-```
-
-## Quick Start
-
+### 1. Clone with Submodule
 ```bash
-# Clone and install
-git clone https://github.com/xpanvictor/agentvault
+git clone --recurse-submodules https://github.com/xpanvictor/agentvault
 cd agentvault
+```
+
+If already cloned:
+```bash
+git submodule update --init --recursive
+```
+
+### 2. Install Dependencies
+```bash
+# AgentVault
 npm install
 
-# Configure
-cp .env.example .env
+# FIL-x402
+cd FIL-x402/facilitator && npm install && cd ../..
+```
 
-# Run (requires FIL-x402 on :3402)
+### 3. Configure
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set `FACILITATOR_ADDRESS` to your wallet address.
+
+### 4. Run
+
+**With FIL-x402 (Full Mode):**
+```bash
+# Terminal 1: FIL-x402
+cd FIL-x402/facilitator && npm run dev
+
+# Terminal 2: AgentVault
 npm run dev
 ```
 
+**Without FIL-x402 (Mock Mode):**
+```bash
+X402_MOCK=true npm run dev
+```
+
+## API Endpoints
+
+| Endpoint | Method | Payment | Description |
+|----------|--------|---------|-------------|
+| `/agent/store` | POST | Required | Store agent data |
+| `/agent/retrieve/:id` | GET | Required | Retrieve stored data |
+| `/agent/verify/:pieceCid` | GET | Free | Verify PDP proof |
+| `/agent/vaults/:agentId` | GET | Free | List agent's vaults |
+
 ## Dependencies
 
-- [FIL-x402](https://github.com/bomanaps/FIL-x402) — x402 payment infrastructure
+- [FIL-x402](https://github.com/bomanaps/FIL-x402) — x402 payment infrastructure (submodule)
 - Node.js 20+
-- Filecoin Calibration testnet
-
-## Status
-
-Building for PL Genesis hackathon (Feb 10 – Mar 16, 2026).
 
 ## License
 

@@ -3,12 +3,15 @@ import type { Payment } from '../types/storage.js';
 
 /**
  * Payment requirements from provider
+ * Re-exported from types for convenience
  */
 export interface PaymentRequirements {
-  tokenAddress: string;
   payTo: string;
   maxAmountRequired: string;
+  tokenAddress: string;
   chainId: number;
+  resource?: string;
+  description?: string;
 }
 
 /**
@@ -23,15 +26,25 @@ export interface VerifyResponse {
 }
 
 /**
+ * FCR (Filecoin Consensus Reorg-resistance) status
+ */
+export interface FCRStatus {
+  level: 'L0' | 'L1' | 'L2' | 'L3' | 'LB';
+  instance?: number;
+  round?: number;
+  phase?: number;
+}
+
+/**
  * Settlement response from FIL-x402
  */
 export interface SettleResponse {
   success: boolean;
   paymentId: string;
-  txHash?: string;
-  status: 'pending' | 'submitted' | 'confirmed' | 'failed';
-  confirmationLevel?: string;
+  transactionCid?: string;
+  status: 'pending' | 'submitted' | 'confirmed' | 'failed' | 'retry';
   error?: string;
+  fcr?: FCRStatus;
 }
 
 /**
@@ -100,7 +113,10 @@ export class X402Client {
   /**
    * Settle a payment on-chain
    */
-  async settlePayment(payment: Payment): Promise<SettleResponse> {
+  async settlePayment(
+    payment: Payment,
+    requirements: PaymentRequirements
+  ): Promise<SettleResponse> {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -110,7 +126,7 @@ export class X402Client {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ payment }),
+        body: JSON.stringify({ payment, requirements }),
         signal: controller.signal,
       });
 
