@@ -22,7 +22,23 @@ export const PaymentSchema = z.object({
 export type Payment = z.infer<typeof PaymentSchema>;
 
 /**
+ * Payment requirements returned in 402 response
+ * Tells the agent how to pay for the request
+ */
+export const PaymentRequirementsSchema = z.object({
+  payTo: z.string(),              // Facilitator wallet address
+  maxAmountRequired: z.string(),  // Amount in USDFC smallest units
+  tokenAddress: z.string(),       // USDFC contract address
+  chainId: z.number(),            // 314159 (Calibration) or 314 (Mainnet)
+  resource: z.string().optional(), // API endpoint being accessed
+  description: z.string().optional(),
+});
+
+export type PaymentRequirements = z.infer<typeof PaymentRequirementsSchema>;
+
+/**
  * Request to store data
+ * Note: Payment comes from x-payment header, not request body
  */
 export const StoreRequestSchema = z.object({
   agentId: z.string().min(1),
@@ -32,7 +48,6 @@ export const StoreRequestSchema = z.object({
     description: z.string().optional(),
     tags: z.array(z.string()).optional(),
   }).optional(),
-  payment: PaymentSchema,
 });
 
 export type StoreRequest = z.infer<typeof StoreRequestSchema>;
@@ -54,14 +69,11 @@ export interface StoreResponse {
 
 /**
  * Request to retrieve data
+ * Note: Payment comes from x-payment header, not request body
+ * The id (vaultId or pieceCid) comes from URL param
  */
 export const RetrieveRequestSchema = z.object({
-  pieceCid: z.string().optional(),
-  vaultId: z.string().optional(),
-  agentId: z.string().min(1),
-  payment: PaymentSchema,
-}).refine(data => data.pieceCid || data.vaultId, {
-  message: 'Either pieceCid or vaultId must be provided',
+  agentId: z.string().min(1).optional(), // Optional - for logging/audit
 });
 
 export type RetrieveRequest = z.infer<typeof RetrieveRequestSchema>;

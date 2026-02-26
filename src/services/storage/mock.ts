@@ -7,9 +7,6 @@ import type {
   PDPStatus,
 } from '../../types/storage.js';
 
-/**
- * Stored data entry in mock provider
- */
 interface MockStoredData {
   data: string;
   metadata?: object;
@@ -18,29 +15,16 @@ interface MockStoredData {
 }
 
 /**
- * MockStorageProvider
- *
- * In-memory storage provider for development and testing.
- * Simulates Filecoin Onchain Cloud behavior with PDP proofs.
- *
- * Note: Data is lost on server restart. This is intentional for MVP.
+ * MockStorageProvider - In-memory storage for development
  */
 export class MockStorageProvider implements IStorageProvider {
   private store: Map<string, MockStoredData> = new Map();
 
-  /**
-   * Generate a realistic-looking PieceCID from data content
-   * Uses 'bafk' prefix to mimic Filecoin CID format
-   */
   private generatePieceCid(data: string): string {
     const hash = createHash('sha256').update(data).digest('hex');
-    // Use first 32 chars of hash for shorter CID
     return `bafk${hash.substring(0, 32)}`;
   }
 
-  /**
-   * Upload data to mock storage
-   */
   async upload(data: string, metadata?: object): Promise<UploadResult> {
     try {
       const pieceCid = this.generatePieceCid(data);
@@ -57,7 +41,7 @@ export class MockStorageProvider implements IStorageProvider {
         success: true,
         pieceCid,
         size,
-        pdpStatus: 'verified' as PDPStatus, // Instant verification for mock
+        pdpStatus: 'verified' as PDPStatus,
       };
     } catch (error) {
       return {
@@ -65,14 +49,11 @@ export class MockStorageProvider implements IStorageProvider {
         pieceCid: '',
         size: 0,
         pdpStatus: 'failed' as PDPStatus,
-        error: error instanceof Error ? error.message : 'Unknown upload error',
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
-  /**
-   * Retrieve data by PieceCID
-   */
   async retrieve(pieceCid: string): Promise<RetrieveResult> {
     const entry = this.store.get(pieceCid);
 
@@ -80,7 +61,7 @@ export class MockStorageProvider implements IStorageProvider {
       return {
         success: false,
         pdpStatus: 'failed' as PDPStatus,
-        error: `Data not found for CID: ${pieceCid}`,
+        error: `Data not found: ${pieceCid}`,
       };
     }
 
@@ -91,10 +72,6 @@ export class MockStorageProvider implements IStorageProvider {
     };
   }
 
-  /**
-   * Verify PDP proof for a PieceCID
-   * In mock, this just checks if the data exists
-   */
   async verifyPDP(pieceCid: string): Promise<PDPVerifyResult> {
     const entry = this.store.get(pieceCid);
 
@@ -102,46 +79,29 @@ export class MockStorageProvider implements IStorageProvider {
       return {
         verified: false,
         verifiedAt: Date.now(),
-        error: `Data not found for CID: ${pieceCid}`,
+        error: `Data not found: ${pieceCid}`,
       };
     }
 
     return {
       verified: true,
-      proof: {
-        provider: 'mock',
-        pieceCid,
-        size: entry.size,
-        uploadedAt: entry.uploadedAt,
-      },
+      proof: { provider: 'mock', pieceCid, size: entry.size },
       verifiedAt: Date.now(),
     };
   }
 
-  /**
-   * Check if data exists (utility method)
-   */
   has(pieceCid: string): boolean {
     return this.store.has(pieceCid);
   }
 
-  /**
-   * Get storage stats (utility method for debugging)
-   */
   getStats(): { totalEntries: number; totalBytes: number } {
     let totalBytes = 0;
     for (const entry of this.store.values()) {
       totalBytes += entry.size;
     }
-    return {
-      totalEntries: this.store.size,
-      totalBytes,
-    };
+    return { totalEntries: this.store.size, totalBytes };
   }
 
-  /**
-   * Clear all stored data (utility method for testing)
-   */
   clear(): void {
     this.store.clear();
   }
