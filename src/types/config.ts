@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const NetworkNames = ['calibration', 'mainnet'] as const;
+export type ENetworkNames = typeof NetworkNames[number];
+
 /**
  * Configuration schema for AgentVault
  *
@@ -27,7 +30,7 @@ export const ConfigSchema = z.object({
     privateKey: z.string().optional(),
   }),
   filecoin: z.object({
-    network: z.enum(['calibration', 'mainnet']).default('calibration'),
+    network: z.enum(NetworkNames).default('calibration'),
     // Chain ID: 314159 (Calibration) or 314 (Mainnet)
     chainId: z.number().default(314159),
     // WebSocket RPC URL for Synapse SDK

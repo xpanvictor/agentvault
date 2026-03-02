@@ -158,7 +158,7 @@ export interface RetrieveResult {
 export interface PDPVerifyResult {
   verified: boolean;
   proof?: object;
-  verifiedAt: number;
+  verifiedAt?: number;
   error?: string;
 }
 
