@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import type { Config } from '../types/config.js';
-import type { StorageService } from '../services/index.js';
+import type { StorageService, IdentityService } from '../services/index.js';
 import type { X402Client, PaymentRequirements } from '../clients/x402.js';
 import {
   Payment,
@@ -12,6 +12,7 @@ import {
   type PDPVerifyResponse,
   type VaultEntry,
 } from '../types/storage.js';
+import { RegisterAgentSchema } from '../types/agent.js';
 
 /**
  * Extract payment from x-payment header
@@ -65,7 +66,8 @@ function buildPaymentRequirements(
 export function createAgentRoutes(
   storageService: StorageService,
   x402Client: X402Client,
-  config: Config
+  config: Config,
+  identityService: IdentityService,
 ) {
   const router = new Hono();
 
@@ -251,6 +253,100 @@ export function createAgentRoutes(
       agentId,
       vaults: vaultSummaries,
       total: vaults.length,
+    });
+  });
+
+  /**
+   * POST /agent/register
+   * Register a new agent (ERC-8004).
+   */
+  router.post(
+    '/register',
+    zValidator('json', RegisterAgentSchema),
+    async (c) => {
+      const body = c.req.valid('json');
+
+      // persisting the identity record so we have a real cardCid.
+      let cardPieceCid = 'mock-card-cid';
+      if (config.identity.enabled) {
+        const cardUpload = await storageService.store({
+          // Use the Ethereum address as the vault owner for the card upload;
+          // the proper agentId doesn't exist yet at this point.
+          agentId: body.address,
+          data: JSON.stringify(body.agentCard),
+          metadata: { type: 'agent_card', description: `Agent card for ${body.agentCard.name}` },
+        });
+
+        if (!cardUpload.success) {
+          return c.json(
+            { error: 'card_upload_failed', reason: cardUpload.error ?? 'Storage error' },
+            500,
+          );
+        }
+
+        cardPieceCid = cardUpload.pieceCid;
+      }
+
+      let result: { agent: NonNullable<ReturnType<IdentityService['getById']>>; isNew: boolean };
+
+      try {
+        result = identityService.registerAgent(body, cardPieceCid) as typeof result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Registration failed';
+        return c.json({ error: 'registration_failed', reason: message }, 400);
+      }
+
+      const { agent, isNew } = result;
+
+      return c.json(
+        {
+          success: true,
+          isNew,
+          agentId: agent.agentId,
+          address: agent.address,
+          agentCard: agent.agentCard,
+          cardCid: agent.cardPieceCid,
+          registeredAt: agent.registeredAt,
+          storageManifest: agent.storageManifest,
+          reputation: agent.reputation,
+        },
+        isNew ? 201 : 200,
+      );
+    },
+  );
+
+  /**
+   * GET /agent/:agentId
+   * Get agent info including card, storage manifest and reputation.
+   */
+  router.get('/:agentId', (c) => {
+    const agentId = c.req.param('agentId');
+    const agent = identityService.getById(agentId);
+
+    if (!agent) {
+      return c.json({ found: false, error: 'Agent not found' }, 404);
+    }
+
+    return c.json({
+      found: true,
+      agent: {
+        agentId: agent.agentId,
+        address: agent.address,
+        agentCard: agent.agentCard,
+        // Spec uses 'cardCid' (ERC-8004 naming); internally stored as cardPieceCid
+        cardCid: agent.cardPieceCid,
+        registeredAt: agent.registeredAt,
+        storageManifest: agent.storageManifest.map((e) => ({
+          vaultId: e.vaultId,
+          pieceCid: e.pieceCid,
+          type: e.type,
+          storedAt: e.storedAt,
+          size: e.size,
+          pdpStatus: e.pdpStatus,
+          pdpVerifiedAt: e.pdpVerifiedAt,
+        })),
+        reputation: agent.reputation,
+      },
     });
   });
 
