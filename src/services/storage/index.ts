@@ -47,12 +47,11 @@ export class StorageService {
     this.index = new VaultIndex();
 
     if (config.storage.provider === 'synapse') {
-      console.warn('Synapse provider not yet implemented, using mock');
       const synapsePK = config.storage.privateKey;
       const chainNetwork = config.filecoin.network;
       const synapse = Synapse.create({
         chain: StorageService.chainNameMapper(chainNetwork),
-        account: `` // todo: configuration
+        account: `0x` // todo: configuration
       })
       this.provider = new SynapseStorageProvider(synapse);
     } else {
