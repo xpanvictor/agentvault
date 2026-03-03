@@ -158,6 +158,15 @@ export interface RetrieveResult {
 export interface PDPVerifyResult {
   verified: boolean;
   proof?: object;
-  verifiedAt: number;
+  verifiedAt?: number;
   error?: string;
+}
+
+// Generic trait-like storage data for consistency
+// Synapse & prolly use in other providers
+export type StorageData = {
+  data: string;
+  metadata?: Record<string, unknown> | object;
+  uploadedAt: number;
+  size: number; // for consistency with mock type
 }

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'crypto';
-import type { Config } from '../../types/config.js';
+import type { Config, ENetworkNames } from '../../types/config.js';
 import type {
   IStorageProvider,
   VaultEntry,
@@ -9,6 +9,8 @@ import type {
 } from '../../types/storage.js';
 import { MockStorageProvider } from './mock.js';
 import { VaultIndex } from './vault-index.js';
+import { SynapseStorageProvider } from './synapse.js';
+import { calibration, Chain, mainnet, Synapse } from '@filoz/synapse-sdk';
 
 export interface StoreParams {
   agentId: string;
@@ -29,13 +31,29 @@ export class StorageService {
   private index: VaultIndex;
   private config: Config;
 
+  static chainNameMapper(chainName: ENetworkNames): Chain {
+    switch (chainName) {
+      case 'calibration':
+        return calibration
+      case 'mainnet':
+        return mainnet
+      default:
+        return calibration;
+    }
+  }
+
   constructor(config: Config) {
     this.config = config;
     this.index = new VaultIndex();
 
     if (config.storage.provider === 'synapse') {
-      console.warn('Synapse provider not yet implemented, using mock');
-      this.provider = new MockStorageProvider();
+      const synapsePK = config.storage.privateKey;
+      const chainNetwork = config.filecoin.network;
+      const synapse = Synapse.create({
+        chain: StorageService.chainNameMapper(chainNetwork),
+        account: `0x` // todo: configuration
+      })
+      this.provider = new SynapseStorageProvider(synapse);
     } else {
       this.provider = new MockStorageProvider();
     }

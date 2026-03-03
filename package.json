@@ -12,9 +12,10 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "hono": "^4.4.0",
+    "@filoz/synapse-sdk": "^0.37.1",
     "@hono/node-server": "^1.11.0",
     "@hono/zod-validator": "^0.2.0",
+    "hono": "^4.4.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
