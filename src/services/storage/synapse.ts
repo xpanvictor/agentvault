@@ -79,11 +79,11 @@ export class SynapseStorageProvider implements IStorageProvider {
         try {
             const verificationStatus = await context.pieceStatus({pieceCid})
             const {dataSetLastProven, exists, isProofOverdue} = verificationStatus
-            // todo: confirm logic of verification
             const verified = exists && !!dataSetLastProven && !isProofOverdue;
             return {
                 verified,
-                verifiedAt: dataSetLastProven!.valueOf(),
+                // verified also checks dataSetLastProven existence
+                verifiedAt: verified ? dataSetLastProven!.valueOf() : null,
                 proof: verificationStatus
             }
         }
