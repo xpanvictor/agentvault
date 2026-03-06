@@ -287,10 +287,10 @@ export function createAgentRoutes(
         cardPieceCid = cardUpload.pieceCid;
       }
 
-      let result: { agent: NonNullable<ReturnType<IdentityService['getById']>>; isNew: boolean };
+      let result: ReturnType<IdentityService['registerAgent']>;
 
       try {
-        result = identityService.registerAgent(body, cardPieceCid) as typeof result;
+        result = identityService.registerAgent(body, cardPieceCid);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Registration failed';
         return c.json({ error: 'registration_failed', reason: message }, 400);
