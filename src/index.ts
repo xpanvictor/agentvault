@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { loadConfig } from './types/config.js';
-import { StorageService } from './services/index.js';
+import { StorageService, IdentityService } from './services/index.js';
 import { X402Client } from './clients/index.js';
 import { createAgentRoutes } from './routes/index.js';
 
@@ -13,6 +13,7 @@ const config = loadConfig();
 // Initialize services
 const storageService = new StorageService(config);
 const x402Client = new X402Client(config);
+const identityService = new IdentityService(config);
 
 // Create Hono app
 const app = new Hono();
@@ -53,6 +54,8 @@ app.get('/', (c) => {
       retrieve: 'GET /agent/retrieve/:id',
       verify: 'GET /agent/verify/:pieceCid',
       vaults: 'GET /agent/vaults/:agentId',
+      register: 'POST /agent/register',
+      agent: 'GET /agent/:agentId',
     },
     x402: {
       dependency: config.x402.apiUrl,
@@ -70,7 +73,7 @@ app.get('/', (c) => {
 });
 
 // Mount agent routes
-const agentRoutes = createAgentRoutes(storageService, x402Client, config);
+const agentRoutes = createAgentRoutes(storageService, x402Client, config, identityService);
 app.route('/agent', agentRoutes);
 
 // Start server
