@@ -116,6 +116,8 @@ The dashboard connects to the AgentVault API at `:3500`. Start the backend first
 - **Audit Trail** — tamper-evident timeline of every store/retrieve operation
 - **Settlements** — x402 payment status with pending/failed/settled filters
 
+→ **For the full workflow — real Filecoin storage, wallet setup, dashboard walkthrough, and ClawVault testing: [hackVault.md](./hackVault.md)**
+
 ---
 
 ## API Reference
