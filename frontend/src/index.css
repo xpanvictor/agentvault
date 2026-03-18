@@ -1,0 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ─────────────────────────────────────── */
+:root {
+  --void:          #000000;
+  --surface:       #080c10;
+  --surface-2:     #0d1117;
+  --surface-3:     #111820;
+  --border:        rgba(0, 229, 255, 0.10);
+  --border-hover:  rgba(0, 229, 255, 0.35);
+  --cyan:          #00e5ff;
+  --cyan-dim:      rgba(0, 229, 255, 0.12);
+  --cyan-glow:     rgba(0, 229, 255, 0.25);
+  --purple:        #a855f7;
+  --purple-dim:    rgba(168, 85, 247, 0.12);
+  --green:         #22c55e;
+  --green-dim:     rgba(34, 197, 94, 0.12);
+  --yellow:        #eab308;
+  --yellow-dim:    rgba(234, 179, 8, 0.12);
+  --red:           #ef4444;
+  --red-dim:       rgba(239, 68, 68, 0.12);
+  --text-1:        #f0f6fc;
+  --text-2:        #8b949e;
+  --text-3:        #30363d;
+  --font-sans:     'Space Grotesk', system-ui, sans-serif;
+  --font-ui:       'Chakra Petch', 'Space Grotesk', sans-serif;
+  --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Base ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--void); }
+::-webkit-scrollbar-thumb { background: #1c2430; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3649; }
+
+/* ─── Selection ──────────────────────────────────────────── */
+::selection { background: rgba(0,229,255,0.22); color: #fff; }
+
+/* ─── Keyframes ──────────────────────────────────────────── */
+@keyframes breathe {
+  0%,100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+@keyframes shimmer {
+  0%   { background-position: -700px 0; }
+  100% { background-position: 700px 0; }
+}
+@keyframes spin-arc { to { transform: rotate(360deg); } }
+@keyframes ripple-out {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+@keyframes draw-line {
+  from { height: 0; opacity: 0; }
+  to   { height: 100%; opacity: 1; }
+}
+@keyframes border-spin {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse-glow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,229,255,0); }
+  50%      { box-shadow: 0 0 18px 3px rgba(0,229,255,0.18); }
+}
+@keyframes shimmer-sweep {
+  0%   { left: -100%; }
+  100% { left: 150%; }
+}
+@keyframes red-bleed {
+  0%,100% { border-left-color: rgba(239,68,68,0.3); }
+  50%      { border-left-color: rgba(239,68,68,0.8); }
+}
+
+/* ─── Utilities ──────────────────────────────────────────── */
+.font-mono { font-family: var(--font-mono) !important; }
+
+.glow-cyan   { box-shadow: 0 0 24px rgba(0,229,255,0.20), 0 0 48px rgba(0,229,255,0.07); }
+.glow-purple { box-shadow: 0 0 24px rgba(168,85,247,0.20), 0 0 48px rgba(168,85,247,0.07); }
+.glow-green  { box-shadow: 0 0 24px rgba(34,197,94,0.25),  0 0 48px rgba(34,197,94,0.08); }
+
+.text-glow-cyan   { text-shadow: 0 0 18px rgba(0,229,255,0.55); }
+.text-glow-purple { text-shadow: 0 0 18px rgba(168,85,247,0.55); }
+
+/* Skeleton shimmer */
+.shimmer {
+  background: linear-gradient(90deg, #0d1117 25%, #111820 50%, #0d1117 75%);
+  background-size: 700px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Glass morphism */
+.glass {
+  background: rgba(8, 12, 16, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Holographic animated border */
+.holo-border {
+  position: relative;
+}
+.holo-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #00e5ff, #a855f7, #22c55e, #00e5ff);
+  background-size: 300% 300%;
+  animation: border-spin 4s linear infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Pending badge breathe */
+.badge-breathe { animation: breathe 2s ease-in-out infinite; }
+
+/* Failed row red bleed */
+.row-failed { animation: red-bleed 2.5s ease-in-out infinite; }
+
+/* Robotic / agentic typography */
+h1, h2, h3 {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Nav / label uppercase Chakra Petch */
+.font-ui {
+  font-family: var(--font-ui) !important;
+}
+
+/* Top nav underline glow */
+@keyframes nav-glow {
+  0%,100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+.nav-active-line {
+  animation: nav-glow 2s ease-in-out infinite;
+}

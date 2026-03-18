@@ -1,0 +1,41 @@
+services:
+  agentvault:
+    build:
+      context: .
+      target: production
+    ports:
+      - "${PORT:-3500}:3500"
+    environment:
+      PORT: 3500
+      HOST: 0.0.0.0
+
+      # Payment — set X402_MOCK=false and supply a real X402_API_URL for production
+      X402_API_URL: ${X402_API_URL:-http://localhost:3402}
+      X402_API_TIMEOUT: ${X402_API_TIMEOUT:-30000}
+      X402_MOCK: ${X402_MOCK:-true}
+      FACILITATOR_ADDRESS: ${FACILITATOR_ADDRESS:-0x0000000000000000000000000000000000000000}
+
+      # Storage — set STORAGE_PROVIDER=synapse and supply STORAGE_PRIVATE_KEY for production
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-mock}
+      STORAGE_PRIVATE_KEY: ${STORAGE_PRIVATE_KEY:-}
+
+      # Identity — set IDENTITY_ENABLED=true with STORAGE_PROVIDER=synapse to persist agents
+      IDENTITY_ENABLED: ${IDENTITY_ENABLED:-false}
+      IDENTITY_REGISTRY_ADDRESS: ${IDENTITY_REGISTRY_ADDRESS:-}
+
+      # Filecoin
+      FILECOIN_NETWORK: ${FILECOIN_NETWORK:-calibration}
+      FILECOIN_CHAIN_ID: ${FILECOIN_CHAIN_ID:-314159}
+      FILECOIN_RPC_URL: ${FILECOIN_RPC_URL:-wss://wss.calibration.node.glif.io/apigw/lotus/rpc/v1}
+      USDFC_ADDRESS: ${USDFC_ADDRESS:-0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0}
+
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3500/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

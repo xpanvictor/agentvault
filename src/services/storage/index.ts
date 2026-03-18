@@ -11,6 +11,9 @@ import { MockStorageProvider } from './mock.js';
 import { VaultIndex } from './vault-index.js';
 import { SynapseStorageProvider } from './synapse.js';
 import { calibration, Chain, mainnet, Synapse } from '@filoz/synapse-sdk';
+import { logger } from '../../utils/logger.js';
+import { privateKeyToAccount } from 'viem/accounts';
+import { webSocket, http } from 'viem';
 
 export interface StoreParams {
   agentId: string;
@@ -49,16 +52,30 @@ export class StorageService {
     if (config.storage.provider === 'synapse') {
       const synapsePK = config.storage.privateKey;
       const chainNetwork = config.filecoin.network;
+
+      if (!synapsePK) {
+        throw new Error(
+          'STORAGE_PRIVATE_KEY is required when STORAGE_PROVIDER=synapse'
+        );
+      }
+
+      const account = privateKeyToAccount(synapsePK as `0x${string}`);
+      const rpcUrl = config.filecoin.rpcUrl;
+      const transport = rpcUrl.startsWith('wss://') || rpcUrl.startsWith('ws://')
+        ? webSocket(rpcUrl)
+        : http(rpcUrl);
+
       const synapse = Synapse.create({
         chain: StorageService.chainNameMapper(chainNetwork),
-        account: `0x` // todo: configuration
-      })
+        account,
+        transport,
+      });
       this.provider = new SynapseStorageProvider(synapse);
     } else {
       this.provider = new MockStorageProvider();
     }
 
-    console.log(`StorageService initialized with provider: ${config.storage.provider}`);
+    logger.info({ provider: config.storage.provider }, 'StorageService initialized');
   }
 
   private generateVaultId(): string {

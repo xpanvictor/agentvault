@@ -158,7 +158,14 @@ export class X402Client {
    */
   async getSettlementStatus(paymentId: string): Promise<SettleResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/settle/${paymentId}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      const response = await fetch(`${this.baseUrl}/settle/${paymentId}`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         return {
@@ -171,6 +178,14 @@ export class X402Client {
 
       return await response.json() as SettleResponse;
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          success: false,
+          paymentId,
+          status: 'failed',
+          error: 'x402_api_timeout',
+        };
+      }
       return {
         success: false,
         paymentId,

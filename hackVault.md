@@ -1,351 +1,337 @@
-# AgentVault + ClawVault - Implementation Roadmap
+# AgentVault — End-to-End Testing Guide
 
-> Verifiable Storage Infrastructure for Autonomous AI Agents on Filecoin
-
-**AgentVault** = Backend protocol (storage, payments, identity)
-**ClawVault** = OpenClaw plugin (first client, 180K+ developer ecosystem)
-
-**Repository:** https://github.com/xpanvictor/agentvault
-**Depends on:** https://github.com/bomanaps/FIL-x402
+This guide walks through testing real Filecoin storage, the full x402 payment flow, the dashboard UI, and the ClawVault SDK from scratch.
 
 ---
 
-## Project Structure
+## Part 1 — Prerequisites
 
-```
-agentvault/
-├── package.json
-├── tsconfig.json
-├── .env.example
-├── .gitignore
-├── README.md
-│
-├── src/                            # AgentVault (Backend Protocol)
-│   ├── index.ts                    # Entry point
-│   │
-│   ├── types/
-│   │   ├── config.ts
-│   │   ├── storage.ts
-│   │   ├── agent.ts
-│   │   └── index.ts
-│   │
-│   ├── clients/
-│   │   ├── x402.ts                 # FIL-x402 API client
-│   │   ├── synapse.ts              # Filecoin Synapse SDK client
-│   │   └── index.ts
-│   │
-│   ├── services/
-│   │   ├── storage.ts              # Storage service (Synapse + Mock fallback)
-│   │   ├── identity.ts             # ERC-8004 agent identity
-│   │   ├── audit.ts                # Audit trail service
-│   │   └── index.ts
-│   │
-│   ├── routes/
-│   │   ├── agent.ts                # /agent/* endpoints
-│   │   ├── health.ts
-│   │   └── index.ts
-│   │
-│   └── __tests__/
-│       ├── storage.test.ts
-│       ├── x402-client.test.ts
-│       └── agent.test.ts
-│
-├── clawvault/                      # ClawVault (OpenClaw Plugin)
-│   ├── package.json
-│   ├── index.ts                    # Plugin entry point
-│   ├── tools/
-│   │   ├── store.ts                # vault.store() tool
-│   │   ├── recall.ts               # vault.recall() tool
-│   │   ├── identity.ts             # vault.identity() tool
-│   │   └── audit.ts                # vault.audit() tool
-│   ├── client.ts                   # AgentVault API client
-│   └── __tests__/
-│       └── clawvault.test.ts
-│
-└── scripts/
-    ├── demo.ts                     # AgentVault demo
-    └── demo-clawvault.ts           # ClawVault demo
+### 1.1 Get a funded wallet on Filecoin Calibration testnet
+
+You need a wallet with two tokens:
+- **tFIL** — for gas fees (free from faucet)
+- **USDFC** — for Synapse storage payments (free from faucet)
+
+**Steps:**
+
+1. Install [MetaMask](https://metamask.io) if you don't have it
+2. Add Filecoin Calibration network to MetaMask:
+   - Network name: `Filecoin Calibration`
+   - RPC URL: `https://api.calibration.node.glif.io/rpc/v1`
+   - Chain ID: `314159`
+   - Currency symbol: `tFIL`
+   - Explorer: `https://calibration.filfox.info`
+3. Copy your wallet address (0x...)
+4. Get free tFIL from the faucet: https://faucet.calibration.fildev.network
+   - Paste your address and request tFIL
+   - Wait ~30 seconds for it to arrive
+5. Get free USDFC from the same faucet — select USDFC, you need at least 5
+6. Export your private key from MetaMask: Settings → Security → Export Private Key
+   - It will start with `0x`
+   - **Never share this key or commit it to git**
+
+---
+
+## Part 2 — Configure the Project
+
+### 2.1 Set environment variables
+
+Open `.env` and set:
+
+```env
+STORAGE_PROVIDER=synapse
+STORAGE_PRIVATE_KEY=0xYourPrivateKeyHere
+
+IDENTITY_ENABLED=true
+
+X402_MOCK=true
+FACILITATOR_ADDRESS=0xYourWalletAddress
+
+FILECOIN_NETWORK=calibration
+FILECOIN_CHAIN_ID=314159
+FILECOIN_RPC_URL=wss://wss.calibration.node.glif.io/apigw/lotus/rpc/v1
 ```
 
----
+> `X402_MOCK=true` keeps payment verification in mock mode so you don't need a running FIL-x402 server. You are only testing real Filecoin storage here.
 
-## Architecture
+### 2.2 Deposit USDFC into the Synapse payment contract (one-time)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLAWVAULT (OpenClaw Plugin)              │
-│          "Agents can move money but can't prove who         │
-│           they are — ClawVault fixes that"                  │
-├─────────────────────────────────────────────────────────────┤
-│  @tool vault.store()     → Store agent memory verifiably    │
-│  @tool vault.recall()    → Retrieve with PDP proof          │
-│  @tool vault.identity()  → Get/verify agent ERC-8004 ID     │
-│  @tool vault.audit()     → Show tamper-proof history        │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP API
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      AGENTVAULT (:3500)                     │
-│                    (Backend Protocol)                       │
-├─────────────────────────────────────────────────────────────┤
-│  POST /agent/store        → Verify payment → Store to       │
-│                             Filecoin Onchain Cloud          │
-│  GET  /agent/retrieve/:id → Verify payment → Return data    │
-│                             with PDP proof                  │
-│  POST /agent/register     → Create ERC-8004 agent identity  │
-│  GET  /agent/audit/:id    → Get full audit trail            │
-│  GET  /agent/verify/:cid  → Verify PDP proof (lightweight)  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-            ┌──────────────┼──────────────┐
-            │              │              │
-            ▼              ▼              ▼
-┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐
-│  FIL-x402     │  │ Synapse SDK   │  │ ERC-8004 Registry     │
-│  (:3402)      │  │ (Filecoin     │  │ (Base Sepolia)        │
-│               │  │ Onchain Cloud)│  │                       │
-├───────────────┤  ├───────────────┤  ├───────────────────────┤
-│ POST /verify  │  │ upload()      │  │ Agent NFT mint        │
-│ POST /settle  │  │ retrieve()    │  │ Agent card → Filecoin │
-│ GET  /health  │  │ verifyPDP()   │  │ Pin metadata          │
-└───────────────┘  └───────────────┘  └───────────────────────┘
+This deposits 5 USDFC on-chain so the Synapse SDK can pay for storage deals.
+
+```bash
+npm run setup:synapse
 ```
 
----
+Expected output:
+```
+Synapse payment setup
+Wallet : 0xYourAddress
+Network: Filecoin Calibration testnet
+Deposit: 5 USDFC
 
-## Core Modules (from Proposal)
+Depositing 5 USDFC into Synapse payment contract...
+✓ Transaction submitted: 0xabc123...
+  View on Filfox: https://calibration.filfox.info/en/tx/0xabc123...
 
-### Module 1: Agent Storage Manager
-- REST API wrapping Synapse SDK
-- PDP-backed warm storage
-- PieceCID indexing
+Waiting for confirmation...
+✓ Confirmed! Lockup balance: 5 USDFC
 
-### Module 2: x402 Storage Payments
-- **Instant Pay-per-Store:** EIP-3009 transferWithAuthorization
-- **Streaming Storage (Escrow):** EIP-712 vouchers with DeferredPaymentEscrow
+You can now run: npm run dev  then  npm run demo
+```
 
-### Module 3: ERC-8004 Agent Identity Layer
-- Agent identity NFT on Base Sepolia
-- Agent card metadata pinned to Filecoin
-- Storage manifest tracking
+If it says `Already have sufficient lockup balance` — you are good, skip to Part 3.
 
-### Module 4: Verifiable Agent Memory
-- Decision logs with CID linking
-- Cross-agent verification
-- Reputation scoring
-
-### Module 5: ClawVault (OpenClaw Plugin)
-- First client proving any framework can integrate AgentVault
-- Targets OpenClaw's 180K+ developer ecosystem
-- Solves "agents can move money but can't prove who they are"
-- Tools: `vault.store()`, `vault.recall()`, `vault.identity()`, `vault.audit()`
+If it says `Insufficient wallet USDFC` — go back to step 1.5 and get more USDFC from the faucet.
 
 ---
 
-## Implementation Stages
+## Part 3 — Start the Application
 
-### Stage 1: Project Foundation
-**Goal:** Basic project setup with working server
+### 3.1 Start everything with one command
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #1 | Initialize project (package.json, tsconfig) | P0 | 🔲 |
-| #2 | Create type definitions | P0 | 🔲 |
-| #3 | Set up Hono server with health endpoint | P0 | 🔲 |
-| #4 | Config loader and .env setup | P0 | 🔲 |
+```bash
+npm run demo:start
+```
 
-**Deliverable:** Server runs on port 3500, `/health` returns OK
+This will:
+- Clear ports 3402, 3500, 5173
+- Start FIL-x402 payment infra on `:3402`
+- Start AgentVault API on `:3500`
+- Start the frontend dashboard on `:5173`
+- Run the demo script (Scenes 1–4)
 
----
+Watch the output — it should say:
+```
+✓ FIL-x402 facilitator running
+✓ AgentVault running  →  storage=synapse  x402.mock=true
+✓ Frontend running  →  http://localhost:5173
+```
 
-### Stage 2: X402 Integration
-**Goal:** AgentVault can verify and settle payments via FIL-x402
+### 3.2 Open the dashboard
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #5 | Create X402 API client | P0 | 🔲 |
-| #6 | Payment verification flow (EIP-3009) | P0 | 🔲 |
-| #7 | Payment settlement flow | P0 | 🔲 |
-| #8 | Streaming escrow support (EIP-712 vouchers) | P1 | 🔲 |
-| #9 | X402 client tests | P1 | 🔲 |
+Go to http://localhost:5173
 
-**Deliverable:** Can call FIL-x402 `/verify` and `/settle` endpoints, support both instant and escrow payments
-
----
-
-### Stage 3: Storage Service (Synapse SDK)
-**Goal:** Store and retrieve data on Filecoin Onchain Cloud with PDP proofs
-
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #10 | Storage service interface | P0 | 🔲 |
-| #11 | Synapse SDK client wrapper | P0 | 🔲 |
-| #12 | Mock storage provider (fallback) | P0 | 🔲 |
-| #13 | PieceCID ↔ vaultId index | P0 | 🔲 |
-| #14 | PDP proof verification | P1 | 🔲 |
-| #15 | Storage service tests | P1 | 🔲 |
-
-**Deliverable:** Can store/retrieve data on Filecoin, get back PieceCID with PDP proof
-
-**Risk:** Synapse SDK availability on Calibration testnet - use Mock fallback if needed
+On the **Dashboard** page confirm:
+- Storage provider shows `synapse` (not `mock`)
+- Status dot is green / Operational
 
 ---
 
-### Stage 4: Agent Routes
-**Goal:** Core API endpoints working end-to-end
+## Part 4 — Test a Real Upload
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #16 | POST /agent/store endpoint | P0 | 🔲 |
-| #17 | GET /agent/retrieve/:pieceCid endpoint | P0 | 🔲 |
-| #18 | GET /agent/verify/:pieceCid endpoint | P1 | 🔲 |
-| #19 | GET /agent/vaults/:agentId endpoint | P1 | 🔲 |
-| #20 | Route integration tests | P1 | 🔲 |
+### 4.1 Register an agent
 
-**Deliverable:** Full store → pay → retrieve flow works with PDP verification
+```bash
+curl -X POST http://localhost:3500/agent/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "address": "0xYourWalletAddress",
+    "agentCard": {
+      "name": "TestAgent",
+      "version": "1.0.0",
+      "x402Support": true
+    },
+    "signature": "0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  }'
+```
 
----
+Copy the `agentId` from the response — it looks like `agent_a1b2c3d4`.
 
-### Stage 5: ERC-8004 Agent Identity
-**Goal:** Agents can register with on-chain identity and Filecoin-pinned metadata
+### 4.2 Store data on Filecoin
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #21 | Identity service | P1 | 🔲 |
-| #22 | POST /agent/register endpoint | P1 | 🔲 |
-| #23 | Agent card schema (capabilities, protocols, x402 support) | P1 | 🔲 |
-| #24 | Pin agent card to Filecoin | P1 | 🔲 |
-| #25 | GET /agent/:agentId endpoint | P1 | 🔲 |
-| #26 | Storage manifest tracking | P1 | 🔲 |
+Step 1 — trigger the 402 to confirm the payment requirement:
 
-**Deliverable:** Agents have ERC-8004 identity NFT with metadata pinned to Filecoin
+```bash
+curl -X POST http://localhost:3500/agent/store \
+  -H "Content-Type: application/json" \
+  -d '{"agentId":"agent_YOURID","data":"Hello Filecoin from AgentVault"}'
+```
 
----
+You will get a `402` back with `payTo`, `maxAmountRequired`, `tokenAddress`, `chainId`.
 
-### Stage 6: Audit & Cross-Agent Verification
-**Goal:** Full audit trail and cross-agent data verification
+Step 2 — store with the mock payment header:
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #27 | Audit service | P1 | 🔲 |
-| #28 | GET /agent/audit/:agentId endpoint | P1 | 🔲 |
-| #29 | Cross-agent verification flow | P1 | 🔲 |
-| #30 | Reputation scoring | P2 | 🔲 |
+```bash
+curl -X POST http://localhost:3500/agent/store \
+  -H "Content-Type: application/json" \
+  -H "x-payment: mock-payment-header" \
+  -d '{
+    "agentId": "agent_YOURID",
+    "data": "Hello Filecoin from AgentVault",
+    "metadata": { "type": "decision_log" }
+  }'
+```
 
-**Deliverable:** Agent B can verify Agent A's data exists on Filecoin via PDP proof
+Expected response:
 
----
+```json
+{
+  "vaultId": "vault_abc123",
+  "pieceCid": "bafk2bzaced...",
+  "agentId": "agent_YOURID",
+  "storedAt": "2026-...",
+  "size": 30,
+  "pdpStatus": "pending"
+}
+```
 
-### Stage 7: Demo & Documentation
-**Goal:** Ready for hackathon submission
+`pdpStatus: pending` is expected — Filecoin storage proofs take a few minutes to confirm.
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #31 | End-to-end demo script | P0 | 🔲 |
-| #32 | README with setup instructions | P0 | 🔲 |
-| #33 | Demo video recording | P0 | 🔲 |
-| #34 | API documentation | P1 | 🔲 |
+### 4.3 Check the PieceCID on Filfox
 
-**Deliverable:** Hackathon submission ready
+Go to:
 
----
+```
+https://calibration.filfox.info/en/message/bafk2bzaced...
+```
 
-### Stage 8: ClawVault (OpenClaw Plugin)
-**Goal:** Prove AgentVault works as a protocol by building the first client
+Replace `bafk2bzaced...` with your actual `pieceCid`. If the deal is visible on Filfox the data is on-chain.
 
-| Issue | Title | Priority | Status |
-|-------|-------|----------|--------|
-| #35 | ClawVault plugin scaffold | P1 | 🔲 |
-| #36 | vault.store() tool | P1 | 🔲 |
-| #37 | vault.recall() tool | P1 | 🔲 |
-| #38 | vault.identity() tool | P1 | 🔲 |
-| #39 | vault.audit() tool | P1 | 🔲 |
-| #40 | OpenClaw integration tests | P1 | 🔲 |
-| #41 | ClawVault demo scenario | P1 | 🔲 |
+### 4.4 Verify via the API
 
-**Deliverable:** OpenClaw agents can store verifiable memory and prove identity via ClawVault
+```bash
+curl http://localhost:3500/agent/verify/bafk2bzaced...
+```
 
-**Why ClawVault:**
-- OpenClaw has 180K+ developers but no verifiable identity/storage
-- Agents can move money but can't prove who they are
-- ClawVault = cryptographic trust built into OpenClaw
-- Proves AgentVault is a protocol, not just a standalone project
+After 5–10 minutes `pdpVerified` should flip to `true`:
 
----
-
-## Demo Scenario (5 Scenes)
-
-### Scene 1: Agent Registration
-- Research Agent registers in ERC-8004 Identity Registry
-- Agent card (capabilities, MCP endpoints, x402 support) pinned to Filecoin
-- Agent deposits 10 USDFC into escrow contract
-
-### Scene 2: Verifiable Research Storage
-- Research Agent generates research summary
-- Calls POST /agent/store with data + signed x402 payment
-- AgentVault uploads to Filecoin Onchain Cloud via Synapse SDK
-- Returns PieceCID, logs operation in audit trail
-
-### Scene 3: Cross-Agent Verification
-- Analysis Agent discovers Research Agent via ERC-8004
-- Queries storage manifest, retrieves research summary by PieceCID
-- Verifies PDP proof - cryptographically proven to be stored on Filecoin
-
-### Scene 4: Audit Trail
-- Show full audit trail: who stored what, when, payment ID, PDP status
-- All verifiable on-chain
-
-### Scene 5: ClawVault in Action
-- OpenClaw agent uses `@tool vault.identity()` to prove who it is
-- Agent stores decision log with `@tool vault.store()` - pays autonomously
-- Another agent verifies the decision with `@tool vault.recall()`
-- Shows: OpenClaw agents now have cryptographic trust built in
+```json
+{
+  "exists": true,
+  "pieceCid": "bafk2bzaced...",
+  "pdpVerified": true,
+  "pdpVerifiedAt": "2026-..."
+}
+```
 
 ---
 
-## Priority Legend
+## Part 5 — Verify in the Dashboard
 
-- **P0** - Must have (MVP)
-- **P1** - Should have (core features)
-- **P2** - Nice to have
-- **P3** - Stretch goal
+### 5.1 Vault Explorer
 
-## Status Legend
+1. Go to http://localhost:5173/vaults
+2. Enter your `agentId` → click **Load**
+3. Your vault row should appear with the `pieceCid` linking to Filfox
+4. Click **Verify** to manually trigger a PDP check — the badge updates live
 
-- 🔲 Not started
-- 🟡 In progress
-- ✅ Complete
-- ❌ Blocked
+### 5.2 Audit Trail
 
----
+1. Go to http://localhost:5173/audit
+2. Enter your `agentId` → click **Load**
+3. A timeline entry for the `store` operation appears with the `pieceCid` and size
 
-## Timeline (5 Weeks)
+### 5.3 Agent Lookup
 
-| Week | Stage | Focus |
-|------|-------|-------|
-| Week 1 (Feb 10-16) | Stage 1-2 | Foundation + X402 Integration |
-| Week 2 (Feb 17-23) | Stage 3-4 | Storage Service + Routes |
-| Week 3 (Feb 24-Mar 2) | Stage 5-6 | ERC-8004 Identity + Audit |
-| Week 4 (Mar 3-9) | Stage 7-8 | Demo + ClawVault Plugin |
-| Week 5 (Mar 10-16) | Polish | Video, docs, submission |
+1. Go to http://localhost:5173/agent
+2. Enter your `agentId`
+3. You should see the agent card, reputation score, and storage manifest listing your vault
 
----
+### 5.4 Settlements
 
-## Risks & Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Synapse SDK testnet instability | Storage operations may fail | Implement retry logic; use Mock fallback |
-| PDP proof timing on Calibration | Proofs may be slow for demo | Pre-store demo data; show polling UI |
-| ERC-8004 cross-chain complexity | Base Sepolia + Filecoin Calibration | Keep identity on Base, storage on Filecoin, link via CID |
-| OpenClaw API changes | ClawVault integration may break | Pin to specific OpenClaw version; abstract tool interface |
+1. Go to http://localhost:5173/settlements
+2. Your payment record should appear — status `settled` (mock mode settles immediately)
 
 ---
 
-## Dependencies
+## Part 6 — Test ClawVault SDK
 
-- **FIL-x402** must be running on `localhost:3402`
-- **Synapse SDK** (`@filecoin/synapse`) - verify availability
-- Node.js 20+
-- USDFC test tokens (Calibration)
-- tFIL for gas (Calibration)
+ClawVault wraps all the above into 4 tool calls with zero HTTP boilerplate.
+
+### 6.1 Run the ClawVault demo
+
+Make sure the servers are still running from Part 3:
+
+```bash
+npm run demo:clawvault
+```
+
+This runs Scene 5 which:
+1. Creates a ClawVault instance pointed at `:3500`
+2. `vault.identity()` — registers the agent with ERC-8004
+3. `vault.store()` — stores data with automatic x402 payment signing
+4. `vault.recall()` — retrieves the data back
+5. `vault.audit()` — prints the tamper-evident operation history
+
+Watch for the `pieceCid` in the output — that CID is your data on Filecoin.
+
+### 6.2 Use ClawVault programmatically
+
+Create a test file:
+
+```ts
+import { ClawVault } from './clawvault/src/index.js';
+
+const vault = new ClawVault({
+  serverUrl: 'http://localhost:3500',
+  privateKey: '0xYourPrivateKey',
+});
+
+// Register agent
+const identity = await vault.identity();
+console.log('Agent ID:', identity.agentId);
+
+// Store data on Filecoin
+const stored = await vault.store({
+  data: 'My first verifiable memory',
+  metadata: { type: 'decision_log' },
+});
+console.log('Vault ID: ', stored.vaultId);
+console.log('PieceCID:', stored.pieceCid);
+console.log('PDP status:', stored.pdpStatus);
+
+// Retrieve it back
+const recalled = await vault.recall({ vaultId: stored.vaultId });
+console.log('Retrieved data:', recalled.data);
+
+// Full audit trail
+const audit = await vault.audit();
+console.log('Total operations:', audit.summary.totalOperations);
+```
+
+Run it:
+
+```bash
+npx tsx your-test-file.ts
+```
+
+---
+
+## Part 7 — Confirm Storage is Real
+
+After 5–10 minutes, run the verify endpoint one more time:
+
+```bash
+curl http://localhost:3500/agent/verify/bafk2bzaced...
+```
+
+When `pdpVerified: true` appears — your data is cryptographically proven to be stored on Filecoin Calibration testnet.
+
+You can also confirm on-chain at:
+
+```
+https://calibration.filfox.info/en/message/bafk2bzaced...
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `setup:synapse` says "Insufficient USDFC" | Not enough USDFC in wallet | Get more from the Calibration faucet |
+| Store returns 500 | Synapse SDK auth failed | Check `STORAGE_PRIVATE_KEY` in `.env` |
+| `pdpStatus` stays `pending` forever | Storage deal not confirmed yet | Wait 10+ min, run verify again |
+| Dashboard shows `storage=mock` | `STORAGE_PROVIDER` not set to `synapse` | Check `.env`, restart the server |
+| `demo:clawvault` fails "connection refused" | Servers not running | Run `npm run demo:start` first |
+| Filfox shows no deal for the CID | Upload failed silently | Check server logs at `/tmp/agentvault.log` |
+
+---
+
+## Stop Everything
+
+```bash
+npm run demo:stop
+```
+
+Kills ports 3402, 3500, and 5173.
