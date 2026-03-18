@@ -1,7 +1,16 @@
 import { randomBytes, createHash } from 'node:crypto';
+import { verifyMessage } from 'viem';
 import type { RegisterAgentRequest, Agent, StorageManifestEntry } from '../../types/agent.js';
 import type { PDPStatus } from '../../types/storage.js';
 import type { IIdentityProvider } from './interface.js';
+
+/**
+ * The canonical message agents must sign when registering.
+ * Bind message to the address to prevent cross-address replay.
+ */
+export function registrationMessage(address: string): string {
+  return `AgentVault registration: ${address.toLowerCase()}`;
+}
 
 /**
  * MockIdentityProvider — fully in-memory identity backend.
@@ -19,10 +28,10 @@ export class MockIdentityProvider implements IIdentityProvider {
   // Registration
   // ---------------------------------------------------------------------------
 
-  registerAgent(
+  async registerAgent(
     req: RegisterAgentRequest,
     cardPieceCid = 'mock-card-cid',
-  ): { agent: Agent; isNew: boolean } {
+  ): Promise<{ agent: Agent; isNew: boolean }> {
     const normalised = req.address.toLowerCase();
 
     // Return existing record if address already registered
@@ -31,9 +40,18 @@ export class MockIdentityProvider implements IIdentityProvider {
       return { agent: this.agents.get(existingId)!, isNew: false };
     }
 
-    // Basic EIP-191 signature format check
-    // TODO(production): full ecrecover via viem `verifyMessage()`
-    validateSignatureFormat(req.signature);
+    // Verify EIP-191 signature — recover signer and confirm it matches address
+    const message = registrationMessage(req.address);
+    const valid = await verifyMessage({
+      address: req.address as `0x${string}`,
+      message,
+      signature: req.signature as `0x${string}`,
+    });
+    if (!valid) {
+      throw new Error(
+        'Signature verification failed — recovered address does not match claimed address',
+      );
+    }
 
     const agentId = generateAgentId(req.address);
     const now = Date.now();
@@ -129,7 +147,7 @@ export class MockIdentityProvider implements IIdentityProvider {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function generateAgentId(address: string): string {
+export function generateAgentId(address: string): string {
   const salt = randomBytes(4).toString('hex');
   const hash = createHash('sha256')
     .update(address.toLowerCase() + salt)
@@ -138,10 +156,3 @@ function generateAgentId(address: string): string {
   return `agent_${hash}`;
 }
 
-function validateSignatureFormat(sig: string): void {
-  if (!/^0x[0-9a-fA-F]{130}$/.test(sig)) {
-    throw new Error(
-      'Invalid signature format — expected 0x-prefixed 65-byte hex string',
-    );
-  }
-}

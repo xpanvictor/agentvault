@@ -23,10 +23,10 @@ export class IdentityService {
     this.provider = provider ?? new MockIdentityProvider();
   }
 
-  registerAgent(
+  async registerAgent(
     req: RegisterAgentRequest,
     cardPieceCid?: string,
-  ): { agent: Agent; isNew: boolean } {
+  ): Promise<{ agent: Agent; isNew: boolean }> {
     return this.provider.registerAgent(req, cardPieceCid);
   }
 
@@ -56,5 +56,23 @@ export class IdentityService {
 
   getStats(): { totalAgents: number } {
     return this.provider.getStats();
+  }
+
+  /**
+   * Export the full agent registry to Filecoin and return the CID.
+   * Only supported by SynapseIdentityProvider — throws for mock provider.
+   */
+  async exportRegistry(): Promise<string> {
+    const provider = this.provider as { exportRegistry?: () => Promise<string> };
+    if (typeof provider.exportRegistry !== 'function') {
+      throw new Error('Current identity provider does not support registry export');
+    }
+    return provider.exportRegistry();
+  }
+
+  /** Returns true when the underlying provider supports exportRegistry(). */
+  supportsExport(): boolean {
+    const provider = this.provider as { exportRegistry?: unknown };
+    return typeof provider.exportRegistry === 'function';
   }
 }

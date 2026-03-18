@@ -8,6 +8,12 @@
     "dev": "tsx watch --env-file .env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "demo": "tsx scripts/demo.ts",
+    "demo:clawvault": "tsx scripts/demo-clawvault.ts",
+    "setup:synapse": "tsx --env-file .env scripts/setup-synapse.ts",
+    "demo:start": "tsx --env-file .env scripts/start.ts",
+    "demo:start:clawvault": "tsx --env-file .env scripts/start.ts clawvault",
+    "demo:stop": "tsx scripts/stop.ts",
     "test": "vitest",
     "lint": "eslint src/"
   },
@@ -16,6 +22,8 @@
     "@hono/node-server": "^1.11.0",
     "@hono/zod-validator": "^0.2.0",
     "hono": "^4.4.0",
+    "pino": "^9.14.0",
+    "viem": "2.x",
     "zod": "^3.23.0"
   },
   "devDependencies": {

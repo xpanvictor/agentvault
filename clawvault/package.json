@@ -1,0 +1,11 @@
+{
+  "name": "@agentvault/clawvault",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for AgentVault — verifiable AI agent memory with x402 micropayments",
+  "type": "module",
+  "keywords": ["filecoin", "x402", "ai-agents", "openclaw", "verifiable-storage"],
+  "license": "MIT",
+  "peerDependencies": {
+    "viem": "2.x"
+  }
+}

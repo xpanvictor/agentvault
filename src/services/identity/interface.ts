@@ -15,7 +15,7 @@ export interface IIdentityProvider {
   registerAgent(
     req: RegisterAgentRequest,
     cardPieceCid?: string,
-  ): { agent: Agent; isNew: boolean };
+  ): Promise<{ agent: Agent; isNew: boolean }>;
 
   /** Look up by generated agentId. */
   getById(agentId: string): Agent | undefined;

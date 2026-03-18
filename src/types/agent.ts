@@ -113,7 +113,7 @@ export interface AuditEntry {
   id: string;
   timestamp: number;
   agentId: string;
-  action: 'store' | 'retrieve' | 'verify' | 'register';
+  action: 'store' | 'retrieve' | 'verify' | 'register' | 'settle';
   details: {
     pieceCid?: string;
     vaultId?: string;
