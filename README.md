@@ -45,7 +45,7 @@ AI Agent (Client)
 
 ### Prerequisites
 - Node.js 20+
-- (Optional) FIL-x402 running on `:3402` for real payment verification
+- (Optional) [FIL-x402](https://github.com/bomanaps/FIL-x402) running on `:3402` for real payment verification
 
 ### 1. Install
 
