@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
+import { randomBytes } from "node:crypto";
 import {
   AgentVaultClient,
   AgentVaultError,
@@ -15,10 +16,16 @@ import type {
   StoreRequest,
 } from "../src/index.js";
 
+// generate private key for ci test environment
+function generate_pk(): string {
+  return `0x${randomBytes(32).toString("hex")}`;
+}
+
 const baseUrl = process.env.BaseAgentVaultUrl ?? "http://localhost:3500";
 const privateKey =
   (process.env.AGENTVAULT_TEST_PRIVATE_KEY as `0x${string}` | undefined) ??
-  (process.env.STORAGE_PRIVATE_KEY as `0x${string}` | undefined);
+  (process.env.STORAGE_PRIVATE_KEY as `0x${string}` | undefined) ??
+  (generate_pk() as `0x${string}`);
 const explicitStorePaymentHeader =
   process.env.AGENTVAULT_TEST_XPAYMENT_HEADER_STORE ??
   process.env.AGENTVAULT_TEST_XPAYMENT_HEADER;
