@@ -164,19 +164,3 @@ Backward-compatible aliases are also exported:
 
 - `AgentVaultApiClient`
 - `AgentVaultApiError`
-
-## Build and Publish
-
-```bash
-cd packages/agentvault-api
-npm run clean
-npm run typecheck
-npm run build
-npm pack
-```
-
-Then publish from this directory:
-
-```bash
-npm publish --access public
-```
