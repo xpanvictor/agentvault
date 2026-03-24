@@ -1,7 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { config as loadEnv } from "dotenv";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   AgentVaultClient,
@@ -17,11 +14,6 @@ import type {
   StoreResponse,
   StoreRequest,
 } from "../src/index.js";
-
-const currentDir = dirname(fileURLToPath(import.meta.url));
-// Load package-level env first, then allow repo-root env to fill missing values.
-loadEnv({ path: resolve(currentDir, "../.env") });
-loadEnv({ path: resolve(currentDir, "../../../.env") });
 
 const baseUrl = process.env.BaseAgentVaultUrl ?? "http://localhost:3500";
 const privateKey =
