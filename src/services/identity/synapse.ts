@@ -1,13 +1,17 @@
-import { verifyMessage } from 'viem';
-import type { Synapse } from '@filoz/synapse-sdk';
-import { logger } from '../../utils/logger.js';
-import type { RegisterAgentRequest, Agent, StorageManifestEntry } from '../../types/agent.js';
-import type { PDPStatus } from '../../types/storage.js';
-import type { IIdentityProvider } from './interface.js';
-import { registrationMessage, generateAgentId } from './mock.js';
+import { verifyMessage } from "viem";
+import type { Synapse } from "@filoz/synapse-sdk";
+import { logger } from "../../utils/logger.js";
+import type {
+  RegisterAgentRequest,
+  Agent,
+  StorageManifestEntry,
+} from "../../types/agent.js";
+import type { PDPStatus } from "../../types/storage.js";
+import type { IIdentityProvider } from "./interface.js";
+import { registrationMessage, generateAgentId } from "./mock.js";
 
 interface RegistrySnapshot {
-  type: 'agent_registry';
+  type: "agent_registry";
   version: string;
   exportedAt: number;
   agents: Agent[];
@@ -48,16 +52,21 @@ export class SynapseIdentityProvider implements IIdentityProvider {
   ): Promise<SynapseIdentityProvider> {
     const provider = new SynapseIdentityProvider(synapse);
 
-    const bytes = await synapse.storage.download({ pieceCid: registryCid }).catch(() => null);
+    const bytes = await synapse.storage
+      .download({ pieceCid: registryCid })
+      .catch(() => null);
     if (!bytes) {
-      logger.warn({ registryCid }, 'Registry CID not found on Filecoin — starting with empty registry');
+      logger.warn(
+        { registryCid },
+        "Registry CID not found on Filecoin — starting with empty registry",
+      );
       return provider;
     }
 
     const text = new TextDecoder().decode(bytes);
     const snapshot = JSON.parse(text) as RegistrySnapshot;
 
-    if (snapshot.type !== 'agent_registry') {
+    if (snapshot.type !== "agent_registry") {
       throw new Error(
         `Invalid registry CID — expected type "agent_registry", got "${snapshot.type}"`,
       );
@@ -68,7 +77,10 @@ export class SynapseIdentityProvider implements IIdentityProvider {
       provider.addressIndex.set(agent.address.toLowerCase(), agent.agentId);
     }
 
-    logger.info({ registryCid, count: snapshot.agents.length }, 'Restored agents from Filecoin registry');
+    logger.info(
+      { registryCid, count: snapshot.agents.length },
+      "Restored agents from Filecoin registry",
+    );
     return provider;
   }
 
@@ -78,9 +90,10 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
   async registerAgent(
     req: RegisterAgentRequest,
-    cardPieceCid = 'mock-card-cid',
+    cardPieceCid = "mock-card-cid",
   ): Promise<{ agent: Agent; isNew: boolean }> {
     const normalised = req.address.toLowerCase();
+    logger.info("cask");
 
     // Return existing record if address already registered
     const existingId = this.addressIndex.get(normalised);
@@ -90,6 +103,12 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
     // Verify EIP-191 signature
     const message = registrationMessage(req.address);
+    logger.info(
+      { message },
+      "Verifying registration signature for address:",
+      req.address,
+    );
+    console.log("Verifying signature for message:", message);
     const valid = await verifyMessage({
       address: req.address as `0x${string}`,
       message,
@@ -97,7 +116,7 @@ export class SynapseIdentityProvider implements IIdentityProvider {
     });
     if (!valid) {
       throw new Error(
-        'Signature verification failed — recovered address does not match claimed address',
+        "Signature verification failed — recovered address does not match claimed address",
       );
     }
 
@@ -123,7 +142,7 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
     // Pin the agent record to Filecoin (non-blocking — registration succeeds regardless)
     this.persistAgent(agent).catch((err) => {
-      logger.error({ agentId, err }, 'Failed to pin agent to Filecoin');
+      logger.error({ agentId, err }, "Failed to pin agent to Filecoin");
     });
 
     return { agent, isNew: true };
@@ -167,13 +186,13 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
     entry.pdpStatus = pdpStatus;
 
-    if (pdpStatus === 'verified') {
+    if (pdpStatus === "verified") {
       entry.pdpVerifiedAt = Date.now();
       agent.reputation.verificationScore = Math.min(
         100,
         agent.reputation.verificationScore + 1,
       );
-    } else if (pdpStatus === 'failed') {
+    } else if (pdpStatus === "failed") {
       agent.reputation.verificationScore = Math.max(
         0,
         agent.reputation.verificationScore - 20,
@@ -205,16 +224,16 @@ export class SynapseIdentityProvider implements IIdentityProvider {
    */
   private async persistAgent(agent: Agent): Promise<string> {
     const payload = JSON.stringify({
-      type: 'agent_record',
-      version: '1.0.0',
+      type: "agent_record",
+      version: "1.0.0",
       ...agent,
     });
     const file = new TextEncoder().encode(payload);
     const context = await this.synapse.storage.createContext({
-      metadata: { source: 'AgentVault-Identity' },
+      metadata: { source: "AgentVault-Identity" },
     });
     const { pieceCid } = await context.upload(file, {
-      metadata: { agentId: agent.agentId, type: 'agent_record' },
+      metadata: { agentId: agent.agentId, type: "agent_record" },
     });
     return pieceCid.toString();
   }
@@ -227,8 +246,8 @@ export class SynapseIdentityProvider implements IIdentityProvider {
    */
   async exportRegistry(): Promise<string> {
     const snapshot: RegistrySnapshot = {
-      type: 'agent_registry',
-      version: '1.0.0',
+      type: "agent_registry",
+      version: "1.0.0",
       exportedAt: Date.now(),
       agents: Array.from(this.agents.values()),
     };
@@ -236,14 +255,17 @@ export class SynapseIdentityProvider implements IIdentityProvider {
     const payload = JSON.stringify(snapshot);
     const file = new TextEncoder().encode(payload);
     const context = await this.synapse.storage.createContext({
-      metadata: { source: 'AgentVault-Identity' },
+      metadata: { source: "AgentVault-Identity" },
     });
     const { pieceCid } = await context.upload(file, {
-      metadata: { type: 'agent_registry' },
+      metadata: { type: "agent_registry" },
     });
 
     const cid = pieceCid.toString();
-    logger.info({ cid, count: snapshot.agents.length }, 'Exported agents to Filecoin registry');
+    logger.info(
+      { cid, count: snapshot.agents.length },
+      "Exported agents to Filecoin registry",
+    );
     return cid;
   }
 }

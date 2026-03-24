@@ -20,7 +20,11 @@ export function Dashboard() {
   const [error, setError]   = useState(false);
 
   const load = async () => {
-    try { setHealth(await api.health()); setError(false); }
+    try {
+      let h = await api.health()
+      setHealth(h); setError(false);
+      console.log("health data", h)
+    }
     catch { setError(true); }
   };
 
@@ -61,12 +65,13 @@ export function Dashboard() {
   const audit    = health.audit        as Record<string, unknown>;
   const settle   = (health as unknown as Record<string, unknown>).settlement as Record<string, unknown> ?? {};
   const x402     = health.x402         as Record<string, unknown>;
-  const vaults   = Number(storage?.vaultCount  ?? 0);
-  const agents   = Number(identity?.agentCount ?? 0);
+  const vaults   = Number(storage?.vaults  ?? 0);
+  const agents   = Number(identity?.totalAgents ?? 0);
   const settled  = Number(settle?.settled      ?? 0);
-  const entries  = Number(audit?.entryCount    ?? 0);
+  const entries  = Number(audit?.totalEntries    ?? 0);
   const failed   = Number(settle?.failed       ?? 0);
   const total    = Number(settle?.total        ?? 0);
+  console.log("rev", storage)
 
   const stats = [
     { label: 'Total Vaults',      value: vaults,  sub: 'Filecoin PieceCIDs',        color: '#00e5ff' },
