@@ -34,6 +34,10 @@ const explicitRetrievePaymentHeader =
 const envTokenName = process.env.AGENTVAULT_TEST_TOKEN_NAME;
 const envTokenVersion = process.env.AGENTVAULT_TEST_TOKEN_VERSION;
 const demoLogs = process.env.AGENTVAULT_TEST_DEMO_LOGS !== "false";
+const runLiveIntegrationInCi =
+  process.env.AGENTVAULT_RUN_LIVE_TESTS === "true";
+const skipLiveIntegrationTest =
+  process.env.CI === "true" && !runLiveIntegrationInCi;
 const signerAddress = privateKey
   ? privateKeyToAccount(privateKey).address
   : undefined;
@@ -137,7 +141,7 @@ describe("AgentVaultClient live integration flow", () => {
         },
   );
 
-  it("runs end-to-end register/store/retrieve/verify/audit/settlements flow", async () => {
+  it.skipIf(skipLiveIntegrationTest)("runs end-to-end register/store/retrieve/verify/audit/settlements flow", async () => {
     logScene("Scene 0: Test configuration", {
       baseUrl,
       signerAddress,
