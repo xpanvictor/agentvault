@@ -1,5 +1,5 @@
 {
-  "name": "@agentvault/api-client",
+  "name": "@agent_vaults/api-client",
   "version": "0.1.0",
   "description": "Type-safe AgentVault SDK for identity, verifiable memory, and x402 payment flows",
   "type": "module",

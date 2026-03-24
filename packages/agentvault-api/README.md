@@ -1,4 +1,4 @@
-# @agentvault/api-client
+# @agent_vaults/api-client
 
 Type-safe JavaScript/TypeScript SDK for AgentVault.
 
@@ -7,7 +7,7 @@ This package is designed as a product SDK interface (identity, verifiable memory
 ## Install
 
 ```bash
-npm install @agentvault/api-client
+npm install @agent_vaults/api-client
 ```
 
 ## Exposed Interface
