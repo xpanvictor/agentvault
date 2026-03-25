@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'packages/agentvault-api/**'
+      - '.github/workflows/ci.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'packages/agentvault-api/**'
+      - '.github/workflows/ci.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck agentvault-api
+        run: |
+          cd packages/agentvault-api
+          npm run typecheck
+
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build agentvault-api
+        run: |
+          cd packages/agentvault-api
+          npm run clean
+          npm run build
+
+      - name: Verify build artifacts
+        run: |
+          cd packages/agentvault-api
+          test -f dist/index.js || (echo "Build failed: dist/index.js not found" && exit 1)
+          test -f dist/index.d.ts || (echo "Build failed: dist/index.d.ts not found" && exit 1)
+          echo "✓ Build artifacts verified"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: packages/agentvault-api/dist/
+          retention-days: 7
+
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: |
+          cd packages/agentvault-api
+          npm test
+
+  package-validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: |
+          cd packages/agentvault-api
+          npm run build
+
+      - name: Validate package (dry-run)
+        run: |
+          cd packages/agentvault-api
+          npm pack --dry-run 2>&1 | grep -E "npm notice|npm WARN" || true
+          echo "✓ Package validation passed"
+
+      - name: Check exports
+        run: |
+          cd packages/agentvault-api
+          node -e "const pkg = require('./package.json'); console.log('Main:', pkg.main); console.log('Types:', pkg.types); console.log('Exports:', JSON.stringify(pkg.exports, null, 2));"

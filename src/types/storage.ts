@@ -12,8 +12,9 @@ export const PaymentSchema = z.object({
   from: z.string(),
   to: z.string(),
   value: z.string(),
-  validAfter: z.string(),
-  validBefore: z.string(),
+  // Accept both string and number payloads; x402 expects numbers downstream.
+  validAfter: z.coerce.number(),
+  validBefore: z.coerce.number(),
   nonce: z.string(),
   signature: z.string(),
   token: z.string(),

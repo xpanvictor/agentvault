@@ -324,6 +324,59 @@ Filecoin Network  →  PieceCID
 
 ---
 
+## NPM Packages
+
+### @agent_vaults/api-client
+
+A type-safe TypeScript SDK for building clients that interact with AgentVault. Handles identity registration, verifiable storage, cryptographic proof verification, and x402 payment flows automatically.
+
+```bash
+npm install @agent_vaults/api-client
+```
+
+**Features:**
+- Type-safe API client with full TypeScript support
+- EIP-712 payment signing integration (viem-based)
+- Automatic nonce management for x402 payments
+- Error handling with detailed error codes and reasons
+- Full audit trail and settlement tracking
+
+**Quick example:**
+
+```typescript
+import { AgentVaultClient, ViemX402PaymentSigner } from '@agent_vaults/api-client';
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+
+const signer = new ViemX402PaymentSigner({
+  walletClient: createWalletClient({
+    account: privateKeyToAccount('0x...'),
+    transport: http('...')
+  }),
+  tokenName: 'USDFC',
+  tokenVersion: '1',
+  chainId: 314159,
+  tokenAddress: '0x...'
+});
+
+const client = new AgentVaultClient({
+  baseUrl: 'http://localhost:3500',
+  signer
+});
+
+const vault = await client.store({
+  agentId: 'agent_001',
+  data: JSON.stringify({ decision: 'invest' }),
+  metadata: { type: 'decision_log' }
+});
+
+console.log('Stored at:', vault.pieceCid);
+```
+
+→ **Full SDK documentation, types, and examples: [packages/agentvault-api/README.md](./packages/agentvault-api/README.md)**
+
+---
+
 ## Demo
 
 **Option A — all-in-one (recommended):**

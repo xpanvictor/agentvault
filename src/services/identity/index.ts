@@ -1,13 +1,13 @@
-import type { Config } from '../../types/config.js';
+import type { Config } from "../../types/config.js";
 import type {
   RegisterAgentRequest,
   Agent,
   StorageManifestEntry,
-} from '../../types/agent.js';
-import type { PDPStatus } from '../../types/storage.js';
-import { MockIdentityProvider } from './mock.js';
-import type { IIdentityProvider } from './interface.js';
-export type { IIdentityProvider } from './interface.js';
+} from "../../types/agent.js";
+import type { PDPStatus } from "../../types/storage.js";
+import { MockIdentityProvider } from "./mock.js";
+import type { IIdentityProvider } from "./interface.js";
+export type { IIdentityProvider } from "./interface.js";
 
 /**
  * IdentityService — thin orchestration layer that delegates to a provider.
@@ -63,9 +63,13 @@ export class IdentityService {
    * Only supported by SynapseIdentityProvider — throws for mock provider.
    */
   async exportRegistry(): Promise<string> {
-    const provider = this.provider as { exportRegistry?: () => Promise<string> };
-    if (typeof provider.exportRegistry !== 'function') {
-      throw new Error('Current identity provider does not support registry export');
+    const provider = this.provider as {
+      exportRegistry?: () => Promise<string>;
+    };
+    if (typeof provider.exportRegistry !== "function") {
+      throw new Error(
+        "Current identity provider does not support registry export",
+      );
     }
     return provider.exportRegistry();
   }
@@ -73,6 +77,6 @@ export class IdentityService {
   /** Returns true when the underlying provider supports exportRegistry(). */
   supportsExport(): boolean {
     const provider = this.provider as { exportRegistry?: unknown };
-    return typeof provider.exportRegistry === 'function';
+    return typeof provider.exportRegistry === "function";
   }
 }
