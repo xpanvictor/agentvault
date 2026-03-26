@@ -23,9 +23,12 @@ const BASE_URL = process.argv.find((a) => a.startsWith('--url='))?.split('=')[1]
   ?? process.env.AGENTVAULT_URL
   ?? 'http://localhost:3500';
 
-// Well-known Anvil / Hardhat test accounts — public keys, never use with real funds
+// Well-known Anvil / Hardhat test accounts — used for EIP-191 identity signing only
 const RESEARCH_PK  = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANALYSIS_PK  = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+
+// Funded wallet for x402 payments — must have USDFC on Calibration (live mode only)
+const PAYER_PK = process.env.STORAGE_PRIVATE_KEY;
 
 // ---------------------------------------------------------------------------
 // Terminal colours
@@ -82,14 +85,28 @@ async function main() {
 
   // ─── Check server ──────────────────────────────────────────────────────────
 
+  let isMock = true;
   try {
     const res = await fetch(`${BASE_URL}/health`);
     const h   = await res.json() as Record<string, unknown>;
     if (h.status !== 'ok') throw new Error();
-    console.log(`  ${c.green}✓${c.reset} AgentVault running  ${c.dim}(x402.mock=${(h.x402 as Record<string,unknown>).mock})${c.reset}\n`);
+    isMock = (h.x402 as Record<string, unknown>).mock === true;
+    console.log(`  ${c.green}✓${c.reset} AgentVault running  ${c.dim}(x402.mock=${isMock})${c.reset}\n`);
   } catch {
-    console.error(`  ${c.red}✗ Server not reachable. Run: X402_MOCK=true npm run dev${c.reset}`);
+    console.error(`  ${c.red}✗ Server not reachable. Run: npm run dev${c.reset}`);
     process.exit(1);
+  }
+
+  if (!isMock && !PAYER_PK) {
+    console.error(`\n  ${c.red}✗  STORAGE_PRIVATE_KEY is not set but server is in live x402 mode.`);
+    console.error(`     Set STORAGE_PRIVATE_KEY in .env or run with X402_MOCK=true.${c.reset}\n`);
+    process.exit(1);
+  }
+
+  if (!isMock) {
+    const { privateKeyToAccount } = await import('viem/accounts');
+    const addr = privateKeyToAccount(PAYER_PK as `0x${string}`).address;
+    console.log(`  ${c.yellow}⚠  Live x402 mode — payments signed by ${addr}${c.reset}\n`);
   }
 
   // ─── Instantiate ClawVault for each agent ──────────────────────────────────
@@ -97,8 +114,9 @@ async function main() {
   note('Creating ClawVault instances for ResearchAgent and AnalysisAgent...');
 
   const researchVault = new ClawVault({
-    url:       BASE_URL,
+    url:        BASE_URL,
     privateKey: RESEARCH_PK,
+    paymentKey: PAYER_PK,
     agentCard: {
       name:         'ResearchAgent',
       version:      '1.0.0',
@@ -108,8 +126,9 @@ async function main() {
   });
 
   const analysisVault = new ClawVault({
-    url:       BASE_URL,
+    url:        BASE_URL,
     privateKey: ANALYSIS_PK,
+    paymentKey: PAYER_PK,
     agentCard: {
       name:         'AnalysisAgent',
       version:      '1.0.0',

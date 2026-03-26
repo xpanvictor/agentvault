@@ -27,7 +27,7 @@ const ROOT         = path.resolve(__dirname, '..');
 const FACILITATOR  = path.resolve(ROOT, '../FIL-x402/facilitator');
 const FRONTEND     = path.resolve(ROOT, 'frontend');
 const PID_FILE     = '/tmp/agentvault-pids.json';
-const DEMO_MODE    = process.argv[2] === 'clawvault' ? 'clawvault' : 'main';
+// demo:start only boots services — run npm run demo or npm run demo:clawvault separately
 
 const c = {
   reset:   '\x1b[0m',
@@ -128,7 +128,11 @@ async function main() {
     '/tmp/agentvault.log'
   );
   await waitForPort('http://localhost:3500/health', 'AgentVault (:3500)');
-  ok('AgentVault running  →  storage=synapse  x402.mock=true');
+  const healthRes  = await fetch('http://localhost:3500/health');
+  const health     = await healthRes.json() as Record<string, unknown>;
+  const stor       = (health.storage as Record<string, unknown>).provider ?? 'unknown';
+  const mockMode   = (health.x402 as Record<string, unknown>).mock;
+  ok(`AgentVault running  →  storage=${stor}  x402.mock=${mockMode}`);
 
   // 4. Start frontend
   bold('Step 4: Starting frontend dashboard (:5173)');
@@ -148,33 +152,14 @@ async function main() {
     frontend: frontend.pid,
   }));
 
-  // 5. Run demo
-  bold(`Step 5: Running demo${DEMO_MODE === 'clawvault' ? ' (ClawVault — Scene 5)' : ' (Scenes 1–4)'}`);
-  console.log();
-
-  await new Promise<void>((resolve, reject) => {
-    const script = DEMO_MODE === 'clawvault'
-      ? ['scripts/demo-clawvault.ts']
-      : ['scripts/demo.ts'];
-
-    const demo = spawn('npx', ['tsx', ...script], {
-      cwd: ROOT,
-      stdio: 'inherit',
-      shell: true,
-    });
-
-    demo.on('close', (code: number | null) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Demo exited with code ${code}`));
-    });
-  });
-
-  // 5. Done
+  // Done — all services running, open browser and run demos manually
   console.log(`\n${c.bold}${c.cyan}${'─'.repeat(58)}${c.reset}`);
-  console.log(`${c.bold}${c.green}  ✓ Demo complete. Servers still running.${c.reset}`);
+  console.log(`${c.bold}${c.green}  ✓ All services running.${c.reset}`);
   console.log(`${c.bold}${c.cyan}${'─'.repeat(58)}${c.reset}\n`);
-  console.log(`  ${c.bold}Browser:${c.reset}  http://localhost:5173`);
-  console.log(`  ${c.dim}Stop everything:${c.reset}  npm run demo:stop\n`);
+  console.log(`  ${c.bold}Dashboard:${c.reset}  http://localhost:5173`);
+  console.log(`  ${c.bold}Run demo:${c.reset}   npm run demo`);
+  console.log(`  ${c.bold}ClawVault:${c.reset}  npm run demo:clawvault`);
+  console.log(`  ${c.dim}Stop all:${c.reset}   npm run demo:stop\n`);
 }
 
 main().catch((e) => {

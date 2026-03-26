@@ -227,7 +227,7 @@ export class AgentVaultClient {
     // Full EIP-3009 TransferWithAuthorization signature
     const signature = await this.account.signTypedData({
       domain: {
-        name:              'USD FileCoin',
+        name:              'USD for Filecoin Community',
         version:           '1',
         chainId:           requirements.chainId,
         verifyingContract: requirements.tokenAddress as `0x${string}`,

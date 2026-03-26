@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api } from '../api';
+import { api, BASE } from '../api';
 import type { VaultSummary } from '../types';
 import { GlowCard } from '../components/GlowCard';
 import { PDPBadge } from '../components/PulseBadge';
@@ -136,7 +136,7 @@ export function Vaults() {
                   </span>
                 </span>
                 <a
-                  href={`https://filfox.info/en/message/${v.pieceCid}`}
+                  href={`${BASE}/agent/verify/${v.pieceCid}`}
                   target="_blank" rel="noopener noreferrer"
                   className="text-xs font-mono truncate pr-2 hover:underline"
                   style={{ color: 'var(--cyan)' }}

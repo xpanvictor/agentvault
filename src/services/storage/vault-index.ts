@@ -1,23 +1,34 @@
 import type { VaultEntry, PDPStatus } from '../../types/storage.js';
+import { loadJson, saveJson } from '../../utils/persist.js';
 
 /**
- * VaultIndex - In-memory index for vault lookups
+ * VaultIndex - Vault lookup index, persisted to data/vaults.json.
  */
 export class VaultIndex {
   private vaultIdIndex: Map<string, VaultEntry> = new Map();
   private pieceCidIndex: Map<string, string> = new Map();
   private agentIndex: Map<string, Set<string>> = new Map();
 
-  add(entry: VaultEntry): void {
+  constructor() {
+    const saved = loadJson<VaultEntry[]>('vaults.json', []);
+    for (const entry of saved) this._index(entry);
+  }
+
+  private _index(entry: VaultEntry): void {
     this.vaultIdIndex.set(entry.vaultId, entry);
     this.pieceCidIndex.set(entry.pieceCid, entry.vaultId);
-
     let agentVaults = this.agentIndex.get(entry.agentId);
-    if (!agentVaults) {
-      agentVaults = new Set();
-      this.agentIndex.set(entry.agentId, agentVaults);
-    }
+    if (!agentVaults) { agentVaults = new Set(); this.agentIndex.set(entry.agentId, agentVaults); }
     agentVaults.add(entry.vaultId);
+  }
+
+  private _save(): void {
+    saveJson('vaults.json', Array.from(this.vaultIdIndex.values()));
+  }
+
+  add(entry: VaultEntry): void {
+    this._index(entry);
+    this._save();
   }
 
   getByVaultId(vaultId: string): VaultEntry | null {
@@ -49,6 +60,7 @@ export class VaultIndex {
 
     entry.pdpStatus = status;
     if (verifiedAt) entry.pdpVerifiedAt = verifiedAt;
+    this._save();
 
     return true;
   }
