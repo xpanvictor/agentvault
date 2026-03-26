@@ -11,6 +11,7 @@
  *   npx tsx scripts/demo.ts --url http://localhost:3500   # custom host
  */
 
+import { randomBytes } from 'node:crypto';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // ---------------------------------------------------------------------------
@@ -21,9 +22,12 @@ const BASE_URL = process.argv.find((a) => a.startsWith('--url='))?.split('=')[1]
   ?? process.env.AGENTVAULT_URL
   ?? 'http://localhost:3500';
 
-// Well-known Anvil / Hardhat test accounts — public keys, never use with real funds
+// Well-known Anvil / Hardhat test accounts — for EIP-191 registration signatures only
 const RESEARCH_AGENT_PK  = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const ANALYSIS_AGENT_PK  = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+
+// Funded wallet for x402 payments — must have USDFC on Calibration
+const PAYER_PK = process.env.STORAGE_PRIVATE_KEY;
 
 // ---------------------------------------------------------------------------
 // Terminal colours
@@ -93,17 +97,51 @@ async function post(path: string, body: unknown, headers?: Record<string, string
   return { status: res.status, body: await res.json() as Record<string, unknown> };
 }
 
-/** Build a mock x402 payment header (server must be running in X402_MOCK=true mode) */
-function mockPayment(nonce: string) {
+/** Sign a real EIP-3009 TransferWithAuthorization for the given payment requirements */
+async function signPayment(
+  account: ReturnType<typeof privateKeyToAccount>,
+  requirements: { payTo: string; maxAmountRequired: string; tokenAddress: string; chainId: number },
+): Promise<string> {
+  const nonce       = `0x${randomBytes(32).toString('hex')}` as `0x${string}`;
+  const validBefore = Math.floor(Date.now() / 1000) + 300; // 5-min window
+
+  const signature = await account.signTypedData({
+    domain: {
+      name:              'USD for Filecoin Community',
+      version:           '1',
+      chainId:           requirements.chainId,
+      verifyingContract: requirements.tokenAddress as `0x${string}`,
+    },
+    types: {
+      TransferWithAuthorization: [
+        { name: 'from',        type: 'address'  },
+        { name: 'to',          type: 'address'  },
+        { name: 'value',       type: 'uint256'  },
+        { name: 'validAfter',  type: 'uint256'  },
+        { name: 'validBefore', type: 'uint256'  },
+        { name: 'nonce',       type: 'bytes32'  },
+      ],
+    },
+    primaryType: 'TransferWithAuthorization',
+    message: {
+      from:        account.address,
+      to:          requirements.payTo          as `0x${string}`,
+      value:       BigInt(requirements.maxAmountRequired),
+      validAfter:  BigInt(0),
+      validBefore: BigInt(validBefore),
+      nonce,
+    },
+  });
+
   return JSON.stringify({
-    from:        '0xdemo0000000000000000000000000000000000000',
-    to:          '0x0000000000000000000000000000000000000000',
-    value:       '10000',
-    validAfter:  '0',
-    validBefore: '9999999999',
+    from:        account.address,
+    to:          requirements.payTo,
+    value:       requirements.maxAmountRequired,
+    validAfter:  0,
+    validBefore,
     nonce,
-    signature:   '0xdemodemo',
-    token:       '0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0',
+    signature,
+    token:       requirements.tokenAddress,
   });
 }
 
@@ -127,12 +165,20 @@ async function main() {
     process.exit(1);
   }
 
-  // Check mock mode — the demo requires it
+  // Check mock mode and resolve payer account
   const { body: healthBody } = await get('/health');
   const isMock = (healthBody.x402 as Record<string, unknown>).mock === true;
+
+  if (!isMock && !PAYER_PK) {
+    console.log(`\n${c.red}  ✗  STORAGE_PRIVATE_KEY is not set but server is in live x402 mode.`);
+    console.log(`     Set STORAGE_PRIVATE_KEY in .env or run with X402_MOCK=true.${c.reset}\n`);
+    process.exit(1);
+  }
+
+  const payerAccount = PAYER_PK ? privateKeyToAccount(PAYER_PK as `0x${string}`) : null;
+
   if (!isMock) {
-    console.log(`\n${c.yellow}  ⚠  Server is NOT in mock mode. Payment verification will run against FIL-x402.`);
-    console.log(`     The demo will still work if FIL-x402 is running, but payments won't be real.${c.reset}\n`);
+    console.log(`\n${c.yellow}  ⚠  Live x402 mode — payments signed by ${payerAccount!.address}${c.reset}\n`);
   }
 
   // ─── Scene 1: Agent Registration ─────────────────────────────────────────
@@ -201,10 +247,14 @@ async function main() {
   field('tokenAddress',     req402.tokenAddress);
 
   step('Submitting x402 payment and storing data');
-  const nonce1 = `demo_nonce_${Date.now()}`;
+  type Reqs = { payTo: string; maxAmountRequired: string; tokenAddress: string; chainId: number };
+  const storeReqs = req402 as Reqs;
+  const payment1 = isMock
+    ? JSON.stringify({ from: '0x0000000000000000000000000000000000000000', to: storeReqs.payTo, value: storeReqs.maxAmountRequired, validAfter: 0, validBefore: 9999999999, nonce: `0x${'0'.repeat(64)}`, signature: `0x${'0'.repeat(130)}`, token: storeReqs.tokenAddress })
+    : await signPayment(payerAccount!, storeReqs);
   const { status: s201, body: stored } = await post('/agent/store',
     { agentId: researchAgentId, data: researchData, metadata: { type: 'dataset', description: 'Filecoin x402 research' } },
-    { 'x-payment': mockPayment(nonce1) },
+    { 'x-payment': payment1 },
   );
   if (s201 !== 201) { fail(`HTTP ${s201}  ${JSON.stringify(stored)}`); process.exit(1); }
   ok('stored on Filecoin');
@@ -217,10 +267,15 @@ async function main() {
   const pieceCid = stored.pieceCid as string;
 
   step('Retrieving data with x402 payment');
-  const nonce2 = `demo_nonce_${Date.now()}_r`;
+  const probeGet = await get(`/agent/retrieve/${vaultId}`);
+  if (probeGet.status !== 402) { fail(`Expected 402, got ${probeGet.status}`); process.exit(1); }
+  const retrieveReqs = probeGet.body as Reqs;
+  const payment2 = isMock
+    ? JSON.stringify({ from: '0x0000000000000000000000000000000000000000', to: retrieveReqs.payTo, value: retrieveReqs.maxAmountRequired, validAfter: 0, validBefore: 9999999999, nonce: `0x${'0'.repeat(64)}`, signature: `0x${'0'.repeat(130)}`, token: retrieveReqs.tokenAddress })
+    : await signPayment(payerAccount!, retrieveReqs);
   const { status: s200, body: retrieved } = await get(
     `/agent/retrieve/${vaultId}`,
-    { 'x-payment': mockPayment(nonce2) },
+    { 'x-payment': payment2 },
   );
   if (s200 !== 200) { fail(`HTTP ${s200}  ${JSON.stringify(retrieved)}`); process.exit(1); }
   ok('retrieved successfully');

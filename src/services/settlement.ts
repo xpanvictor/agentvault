@@ -29,8 +29,15 @@ export interface SettlementStats {
   total: number;
 }
 
+import { loadJson, saveJson } from '../utils/persist.js';
+
 export class SettlementTracker {
   private readonly records = new Map<string, SettlementRecord>();
+
+  constructor() {
+    const saved = loadJson<SettlementRecord[]>('settlements.json', []);
+    for (const r of saved) this.records.set(r.paymentId, r);
+  }
 
   /**
    * Register a new settlement attempt as pending.
@@ -45,6 +52,7 @@ export class SettlementTracker {
       attempts: 0,
       lastAttemptAt: Date.now(),
     });
+    this._save();
   }
 
   /**
@@ -65,6 +73,11 @@ export class SettlementTracker {
     } else if (status === 'failed' && error) {
       record.error = error;
     }
+    this._save();
+  }
+
+  private _save(): void {
+    saveJson('settlements.json', Array.from(this.records.values()));
   }
 
   getStats(): SettlementStats {

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { AuditEntry, AuditTrailResponse } from '../types/agent.js';
+import { loadJson, saveJson } from '../utils/persist.js';
 
 type LogInput = Omit<AuditEntry, 'id' | 'timestamp'>;
 
 /**
- * AuditService — tamper-evident in-memory audit log.
+ * AuditService — tamper-evident audit log, persisted to data/audit.json.
  *
  * Records every agent operation (store, retrieve, verify, register).
  * Entries are append-only; nothing is ever deleted or mutated.
@@ -12,6 +13,13 @@ type LogInput = Omit<AuditEntry, 'id' | 'timestamp'>;
 export class AuditService {
   /** agentId → ordered list of audit entries */
   private readonly entries = new Map<string, AuditEntry[]>();
+
+  constructor() {
+    const saved = loadJson<Record<string, AuditEntry[]>>('audit.json', {});
+    for (const [agentId, list] of Object.entries(saved)) {
+      this.entries.set(agentId, list);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Write
@@ -27,8 +35,15 @@ export class AuditService {
     const list = this.entries.get(input.agentId) ?? [];
     list.push(entry);
     this.entries.set(input.agentId, list);
+    this._save();
 
     return entry;
+  }
+
+  private _save(): void {
+    const data: Record<string, AuditEntry[]> = {};
+    for (const [k, v] of this.entries) data[k] = v;
+    saveJson('audit.json', data);
   }
 
   // ---------------------------------------------------------------------------

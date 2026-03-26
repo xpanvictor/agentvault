@@ -8,7 +8,7 @@ import type {
   SettlementStatus,
 } from './types';
 
-const BASE = 'http://localhost:3500';
+export const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3500';
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);

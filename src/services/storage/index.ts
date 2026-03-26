@@ -191,6 +191,22 @@ export class StorageService {
       };
     }
 
+    // PDP proof is permanent on-chain — once verified, always verified.
+    // Use the cached status to avoid a stale Synapse context returning false
+    // after a server restart when the piece was already confirmed.
+    if (entry.pdpStatus === 'verified') {
+      return {
+        exists: true,
+        pieceCid,
+        vaultId: entry.vaultId,
+        storedBy: entry.agentId,
+        storedAt: entry.storedAt,
+        pdpVerified: true,
+        pdpVerifiedAt: entry.pdpVerifiedAt,
+      };
+    }
+
+    // Not yet verified — ask Synapse live
     const result = await this.provider.verifyPDP(pieceCid);
 
     if (result.verified) {

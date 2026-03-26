@@ -9,7 +9,8 @@
  *
  *   const vault = new ClawVault({
  *     url:        'http://localhost:3500',
- *     privateKey: '0x...',            // signs registrations + x402 payments
+ *     privateKey: '0x...',            // signs EIP-191 registration + agent identity
+ *     paymentKey: '0x...',            // signs EIP-3009 x402 payments (defaults to privateKey)
  *     agentCard:  { name: 'MyAgent', version: '1.0.0', x402Support: true },
  *   });
  *
@@ -46,8 +47,14 @@ export type { AgentVaultClient } from './client.js';
 export interface ClawVaultConfig {
   /** AgentVault server URL. Default: http://localhost:3500 */
   url?: string;
-  /** Wallet private key. Used to sign EIP-191 registrations and EIP-3009 payments. */
+  /** Wallet private key. Used to sign EIP-191 registrations (agent identity). */
   privateKey?: string;
+  /**
+   * Optional separate wallet private key for signing EIP-3009 x402 payments.
+   * Defaults to `privateKey` when not set. Use this when the agent's identity key
+   * and the funded payment wallet are different accounts.
+   */
+  paymentKey?: string;
   /**
    * Pre-existing agentId. Skip auto-registration on first use.
    * Leave unset to auto-register with the provided agentCard.
@@ -77,11 +84,15 @@ export class ClawVault {
     this.config   = config;
     this._agentId = config.agentId ?? null;
 
-    const account = config.privateKey
+    const account        = config.privateKey
       ? privateKeyToAccount(config.privateKey as `0x${string}`)
       : null;
 
-    this.client = new AgentVaultClient(config.url ?? 'http://localhost:3500', account);
+    const paymentAccount = config.paymentKey
+      ? privateKeyToAccount(config.paymentKey as `0x${string}`)
+      : account;
+
+    this.client = new AgentVaultClient(config.url ?? 'http://localhost:3500', paymentAccount);
   }
 
   // ─── Auto-registration ────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { verifyMessage } from "viem";
 import type { Synapse } from "@filoz/synapse-sdk";
 import { logger } from "../../utils/logger.js";
+import { loadJson, saveJson } from "../../utils/persist.js";
 import type {
   RegisterAgentRequest,
   Agent,
@@ -36,7 +37,21 @@ export class SynapseIdentityProvider implements IIdentityProvider {
   /** normalised address → agentId */
   private readonly addressIndex = new Map<string, string>();
 
-  constructor(private readonly synapse: Synapse) {}
+  constructor(private readonly synapse: Synapse) {
+    // Restore local state from disk (survives server restarts without Filecoin roundtrip)
+    const saved = loadJson<Agent[]>('identity.json', []);
+    for (const agent of saved) {
+      this.agents.set(agent.agentId, agent);
+      this.addressIndex.set(agent.address.toLowerCase(), agent.agentId);
+    }
+    if (saved.length > 0) {
+      logger.info({ count: saved.length }, 'Restored agent registry from local disk');
+    }
+  }
+
+  private _save(): void {
+    saveJson('identity.json', Array.from(this.agents.values()));
+  }
 
   // ---------------------------------------------------------------------------
   // Static factory — restore from Filecoin snapshot
@@ -139,6 +154,7 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
     this.agents.set(agentId, agent);
     this.addressIndex.set(normalised, agentId);
+    this._save();
 
     // Pin the agent record to Filecoin (non-blocking — registration succeeds regardless)
     this.persistAgent(agent).catch((err) => {
@@ -171,6 +187,7 @@ export class SynapseIdentityProvider implements IIdentityProvider {
 
     agent.storageManifest.push(entry);
     agent.reputation.totalStored += 1;
+    this._save();
   }
 
   updateManifestPDPStatus(
@@ -198,12 +215,14 @@ export class SynapseIdentityProvider implements IIdentityProvider {
         agent.reputation.verificationScore - 20,
       );
     }
+    this._save();
   }
 
   recordRetrieve(agentId: string): void {
     const agent = this.agents.get(agentId);
     if (!agent) return;
     agent.reputation.totalRetrieved += 1;
+    this._save();
   }
 
   // ---------------------------------------------------------------------------
