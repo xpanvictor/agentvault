@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "demo": "tsx --env-file .env scripts/demo.ts",
     "demo:clawvault": "tsx --env-file .env scripts/demo-clawvault.ts",
+    "demo:toolchat": "tsx --env-file .env scripts/demo-agent-toolchat.ts",
     "setup:synapse": "tsx --env-file .env scripts/setup-synapse.ts",
     "demo:start": "tsx --env-file .env scripts/start.ts",
     "demo:start:clawvault": "tsx --env-file .env scripts/start.ts clawvault",
