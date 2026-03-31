@@ -104,6 +104,8 @@ And shared references are persisted in:
 
 ## Notes
 
-- Uses ClawVault SDK tool calls (`vault_identity`, `vault_store`, `vault_recall`, `vault_audit`).
+- Uses `@agent_vaults/api-client` as the vault interface source and exposes LangChain tools for:
+	`vault_health`, `vault_identity`, `vault_store`, `vault_recall`, `vault_verify`,
+	`vault_list_vaults`, `vault_audit`, and `vault_settlements`.
 - Uses LangChain chat models: OpenAI / Anthropic / Gemini.
 - In live x402 mode, ensure payment key has funds and correct domain settings.

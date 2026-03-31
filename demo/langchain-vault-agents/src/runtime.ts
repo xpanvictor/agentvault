@@ -4,7 +4,11 @@ import { ChatOpenAI } from "@langchain/openai";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { ClawVault } from "../../../clawvault/src/index.js";
+import {
+  AgentVaultClient,
+  ViemX402PaymentSigner,
+  createSignedRegisterAgentRequest,
+} from "../../../packages/agentvault-api/src/index.js";
 import type { Role, DemoState, ToolLogEntry, StoredRef } from "./types.js";
 import { appendToolLog } from "./io.js";
 
@@ -23,13 +27,27 @@ const INFERENCE_PK =
   process.env.INFERENCE_AGENT_PK ??
   "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const PAYMENT_PK = process.env.STORAGE_PRIVATE_KEY;
+const TOKEN_NAME = process.env.AGENTVAULT_TEST_TOKEN_NAME ?? "USD for Filecoin Community";
+const TOKEN_VERSION = process.env.AGENTVAULT_TEST_TOKEN_VERSION ?? "1";
 
-function createVault(role: Role) {
-  return new ClawVault({
-    url: BASE_URL,
-    privateKey: role === "research" ? RESEARCH_PK : INFERENCE_PK,
-    paymentKey: PAYMENT_PK,
-    agentCard: {
+function createSdkClient(role: Role) {
+  const identityPrivateKey =
+    (role === "research" ? RESEARCH_PK : INFERENCE_PK) as `0x${string}`;
+  const paymentPrivateKey =
+    (PAYMENT_PK ?? identityPrivateKey) as `0x${string}`;
+
+  const client = new AgentVaultClient({
+    baseUrl: BASE_URL,
+    paymentSigner: new ViemX402PaymentSigner(paymentPrivateKey, {
+      tokenName: TOKEN_NAME,
+      tokenVersion: TOKEN_VERSION,
+    }),
+  });
+
+  return {
+    client,
+    identityPrivateKey,
+    defaultCard: {
       name: role === "research" ? "ResearchAgent" : "InferenceAgent",
       version: "1.0.0",
       x402Support: true,
@@ -38,11 +56,28 @@ function createVault(role: Role) {
           ? ["research", "store-findings"]
           : ["inference", "reasoning"],
     },
-  });
+  };
 }
 
 async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
-  const vault = createVault(role);
+  const { client, identityPrivateKey, defaultCard } = createSdkClient(role);
+  let selfAgentId: string | undefined =
+    role === "research" ? state.researchAgentId : state.inferenceAgentId;
+
+  const ensureRegistered = async (): Promise<string> => {
+    if (selfAgentId) {
+      const existing = await client.getAgent(selfAgentId);
+      if (existing.found) return selfAgentId;
+    }
+
+    const payload = await createSignedRegisterAgentRequest(
+      identityPrivateKey,
+      defaultCard,
+    );
+    const registered = await client.registerAgent(payload);
+    selfAgentId = registered.agentId;
+    return selfAgentId;
+  };
 
   const logAndReturn = async (
     tool: string,
@@ -67,19 +102,47 @@ async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
 
   const tools = [
     new DynamicStructuredTool({
+      name: "vault_health",
+      description: "Get AgentVault health and x402/storage mode.",
+      schema: z.object({}),
+      func: async (input: Record<string, never>) =>
+        logAndReturn("vault_health", input, async () => client.getHealth()),
+    }),
+    new DynamicStructuredTool({
       name: "vault_identity",
       description:
-        "Get own identity, or lookup another agent by agentId. Use this before trusting shared data.",
+        "Get own identity, or lookup another agent by agentId. Auto-registers self if needed.",
       schema: z.object({
         agentId: z.string().optional(),
       }),
       func: async (input: { agentId?: string }) =>
-        logAndReturn("vault_identity", input, async () => vault.callTool("vault_identity", input)),
+        logAndReturn("vault_identity", input, async () => {
+          const targetAgentId = input.agentId ?? (await ensureRegistered());
+          const result = await client.getAgent(targetAgentId);
+          if (!result.found || !result.agent) {
+            return {
+              agentId: targetAgentId,
+              verified: false,
+            };
+          }
+          const card = result.agent.agentCard as unknown as Record<string, unknown>;
+          return {
+            agentId: result.agent.agentId,
+            address: result.agent.address,
+            name: (card.name as string) ?? "",
+            version: (card.version as string) ?? "",
+            cardCid: result.agent.cardCid,
+            registeredAt: result.agent.registeredAt,
+            x402Support: (card.x402Support as boolean) ?? false,
+            storageVaultCount: result.agent.storageManifest.length,
+            reputation: result.agent.reputation,
+            verified: true,
+          };
+        }),
     }),
     new DynamicStructuredTool({
       name: "vault_store",
-      description:
-        "Store a finding in AgentVault. Use for durable evidence and memory transfer.",
+      description: "Store data in AgentVault with automatic x402 payment handling.",
       schema: z.object({
         data: z.string(),
         type: z
@@ -94,7 +157,25 @@ async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
         description?: string;
         tags?: string[];
       }) =>
-        logAndReturn("vault_store", input, async () => vault.callTool("vault_store", input)),
+        logAndReturn("vault_store", input, async () => {
+          const agentId = await ensureRegistered();
+          const result = await client.store({
+            agentId,
+            data: input.data,
+            metadata: {
+              type: input.type ?? "other",
+              description: input.description,
+              tags: input.tags,
+            },
+          });
+          return {
+            vaultId: result.vaultId,
+            pieceCid: result.pieceCid,
+            size: result.size,
+            pdpStatus: result.pdpStatus,
+            paymentId: result.paymentId,
+          };
+        }),
     }),
     new DynamicStructuredTool({
       name: "vault_recall",
@@ -103,7 +184,28 @@ async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
         id: z.string(),
       }),
       func: async (input: { id: string }) =>
-        logAndReturn("vault_recall", input, async () => vault.callTool("vault_recall", input)),
+        logAndReturn("vault_recall", input, async () => client.retrieve(input.id)),
+    }),
+    new DynamicStructuredTool({
+      name: "vault_verify",
+      description: "Verify a piece CID PDP state.",
+      schema: z.object({
+        pieceCid: z.string(),
+      }),
+      func: async (input: { pieceCid: string }) =>
+        logAndReturn("vault_verify", input, async () => client.verify(input.pieceCid)),
+    }),
+    new DynamicStructuredTool({
+      name: "vault_list_vaults",
+      description: "List vault entries for self or a target agent.",
+      schema: z.object({
+        agentId: z.string().optional(),
+      }),
+      func: async (input: { agentId?: string }) =>
+        logAndReturn("vault_list_vaults", input, async () => {
+          const targetAgentId = input.agentId ?? (await ensureRegistered());
+          return client.listVaults(targetAgentId);
+        }),
     }),
     new DynamicStructuredTool({
       name: "vault_audit",
@@ -113,7 +215,35 @@ async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
         limit: z.number().int().min(1).optional(),
       }),
       func: async (input: { agentId?: string; limit?: number }) =>
-        logAndReturn("vault_audit", input, async () => vault.callTool("vault_audit", input)),
+        logAndReturn("vault_audit", input, async () => {
+          const targetAgentId = input.agentId ?? (await ensureRegistered());
+          const result = await client.getAuditTrail(targetAgentId);
+          if (input.limit && input.limit > 0) {
+            return {
+              ...result,
+              entries: result.entries.slice(-input.limit),
+            };
+          }
+          return result;
+        }),
+    }),
+    new DynamicStructuredTool({
+      name: "vault_settlements",
+      description: "List settlements or get one settlement by paymentId.",
+      schema: z.object({
+        status: z.enum(["pending", "settled", "failed"]).optional(),
+        paymentId: z.string().optional(),
+      }),
+      func: async (input: {
+        status?: "pending" | "settled" | "failed";
+        paymentId?: string;
+      }) =>
+        logAndReturn("vault_settlements", input, async () => {
+          if (input.paymentId) {
+            return client.getSettlement(input.paymentId);
+          }
+          return client.listSettlements(input.status);
+        }),
     }),
     new DynamicStructuredTool({
       name: "shared_state",
@@ -129,7 +259,10 @@ async function buildTools(role: Role, state: DemoState, logs: ToolLogEntry[]) {
     }),
   ];
 
-  return { vault, tools };
+  return {
+    tools,
+    getSelfAgentId: () => selfAgentId,
+  };
 }
 
 export async function runAgentTurn(input: {
@@ -146,7 +279,7 @@ export async function runAgentTurn(input: {
   }
 
   const logs: ToolLogEntry[] = [];
-  const { vault, tools } = await buildTools(input.role, input.state, logs);
+  const { tools, getSelfAgentId } = await buildTools(input.role, input.state, logs);
 
   const llm = OPENAI_API_KEY
     ? new ChatOpenAI({
@@ -253,7 +386,11 @@ export async function runAgentTurn(input: {
     if (firstId) updatedState.inferenceAgentId = firstId;
   }
 
-  await vault.getAgentId();
+  const selfAgentId = getSelfAgentId();
+  if (selfAgentId) {
+    if (input.role === "research") updatedState.researchAgentId = selfAgentId;
+    if (input.role === "inference") updatedState.inferenceAgentId = selfAgentId;
+  }
 
   return {
     answer: finalAnswer || "No final answer produced.",
